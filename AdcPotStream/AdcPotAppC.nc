@@ -11,14 +11,11 @@ configuration AdcPotAppC{
 implementation {
   components AdcPotC, MainC, HplMsp430GeneralIOC;
   components SerialPrintfC;
-  components new AdcReadClientC() as PotAdc; 
-  /*components new SineSensorC() as PotAdc; */
-  components new TimerMilliC() as Timer1; 
+  components new AdcReadStreamClientC() as PotAdc; 
 
   AdcPotC -> MainC.Boot;
-  AdcPotC.PotAdcRead -> PotAdc.Read;
+  AdcPotC.PotAdcReadStream -> PotAdc.ReadStream;
   AdcPotC.PotAdcConfigure <- PotAdc.AdcConfigure;
-  AdcPotC.Timer1 -> Timer1;
   AdcPotC.P80 -> HplMsp430GeneralIOC.Port80;
 
 }
