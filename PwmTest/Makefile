@@ -1,0 +1,2 @@
+COMPONENT=PwmTestAppC
+include $(MAKERULES)
