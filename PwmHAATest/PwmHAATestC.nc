@@ -9,6 +9,7 @@ module PwmHAATestC {
     interface Msp430TimerControl as TimerControl0;
     interface Msp430TimerControl as TimerControl1;
     interface Msp430Timer as TimerB;
+    interface HplMsp430GeneralIO as P4_0;
     interface Leds;
   }
 
@@ -22,15 +23,23 @@ implementation {
   const uint16_t DUTY_MIN = 1;
   const uint16_t DUTY_MAX = 0x1ff;
 
+  typedef msp430_compare_control_t cc_t;
   command error_t Init.init(){
+    cc_t x;
     call TimerControl0.setControlAsCompare();
     call TimerControl0.enableEvents();
     call TimerControl1.setControlAsCompare();
     call TimerControl1.enableEvents();
     call TimerCompare0.setEvent(0x1ff);
     call TimerCompare1.setEvent(0x001);
+    x = call TimerControl1.getControl();
+    x.outmod = 3; // Enable set/reset output mode
+    call TimerControl1.setControl(x);
+    call P4_0.selectModuleFunc();
+    call P4_0.makeOutput();
+
     call TimerB.setClockSource(1);
-    call TimerB.setMode(1);
+    call TimerB.setMode(1); // Starts timer
     return SUCCESS;
   }
 

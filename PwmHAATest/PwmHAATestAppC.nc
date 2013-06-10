@@ -7,7 +7,7 @@ implementation {
   components LedsC;
 
   MainC.SoftwareInit -> PwmHAATestC;
-  /*PwmHAATestC.P4_0 -> GPIO.Port40;*/
+  PwmHAATestC.P4_0 -> GPIO.Port40;
   PwmHAATestC.TimerControl0 -> Msp430TimerC.Control0_B0;
   PwmHAATestC.TimerCompare0 -> Msp430TimerC.Compare0_B0;
 
