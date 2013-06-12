@@ -1,0 +1,2 @@
+COMPONENT=ClockTestAppC
+include $(MAKERULES)
