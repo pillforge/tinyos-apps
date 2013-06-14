@@ -11,7 +11,7 @@ generic module HplCma3000d0xP() {
     interface Resource;
     interface HplMsp430GeneralIO as AccelPower;
     interface HplMsp430GeneralIO as AccelCS;
-    interface HplMsp430GeneralIO as AccelInt;
+    interface HplMsp430Interrupt as AccelInt;
   }
 }
 implementation {
@@ -36,7 +36,6 @@ implementation {
   event void Resource.granted(){
     call AccelCS.makeOutput();
     call AccelPower.makeOutput();
-    call AccelInt.makeInput();
     call AccelCS.set();
     call AccelPower.set();
     call BusyWait.wait(10000);
@@ -73,6 +72,22 @@ implementation {
     return val;
   }
 
+  accel_t reading;
+  bool dataReady = FALSE;
+  task void readAccel_task(){
+    atomic{
+      if(dataReady) {
+        reading.x = readRegister(CMA3000_DOUTX);
+        reading.y = readRegister(CMA3000_DOUTY);
+        reading.z = readRegister(CMA3000_DOUTZ);
+        dataReady = FALSE;
+      }
+    }
+    atomic signal Accel.readDone(SUCCESS, reading);
+    post readAccel_task();
+  }
+
+
   command error_t Init.init(){
     uint8_t rx, who_am_i, revid, ctrl, status;
     printf("Timer fired\r\n");
@@ -91,23 +106,22 @@ implementation {
     status = readRegister(CMA3000_STATUS);
 
     printf("CTRL %#x STATUS %#x\r\n", ctrl, status);
+    // Enable interrupt
+
+    atomic{
+      call AccelInt.edge(TRUE);
+      call AccelInt.clear();
+      call AccelInt.enable();
+    }
     deviceReady = TRUE;
+    post readAccel_task();
     return SUCCESS;
   }
 
-  task void readAccel_task(){
-    accel_t reading;
-    /*while(!call AccelInt.get());*/
-    reading.x = readRegister(CMA3000_DOUTX);
-    reading.y = readRegister(CMA3000_DOUTY);
-    reading.z = readRegister(CMA3000_DOUTZ);
-
-    signal Accel.readDone(SUCCESS, reading);
-  }
 
   command error_t Accel.read(){
     if(deviceReady){
-      post readAccel_task();
+      atomic dataReady = TRUE;
       return SUCCESS;
     }else {
       return EBUSY;
@@ -116,6 +130,11 @@ implementation {
 
   async command const msp430_usci_config_t* Msp430UsciConfigure.getConfiguration() {
       return &msp430_usci_spi_accel_config;
+  }
+
+  async event void AccelInt.fired(){
+    atomic dataReady = TRUE;
+    atomic call AccelInt.clear();
   }
 
 }

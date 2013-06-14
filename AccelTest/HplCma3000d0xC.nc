@@ -10,7 +10,7 @@ generic configuration HplCma3000d0xC() {
     interface Resource as SpiResource;
     interface HplMsp430GeneralIO as AccelPower;
     interface HplMsp430GeneralIO as AccelCS;
-    interface HplMsp430GeneralIO as AccelInt;
+    interface HplMsp430Interrupt as AccelInt;
   }
 }
 implementation {

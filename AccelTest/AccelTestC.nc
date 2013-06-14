@@ -38,7 +38,6 @@ implementation {
 
   event void TimerLED.fired(){
     call Leds.led0Toggle();
-    /*call AccelSensor.read();*/
   }
 
 }
