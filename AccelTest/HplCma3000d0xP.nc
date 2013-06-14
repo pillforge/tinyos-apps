@@ -1,16 +1,17 @@
 generic module HplCma3000d0xP() {
   provides {
     interface Read<accel_t> as Accel;
-    interface Init;
     interface Msp430UsciConfigure;
+    interface SplitControl;
+    interface Init;
   }
   uses {
+    interface BusyWait<TMicro, uint16_t>;
     interface SpiByte;
-    interface Resource as SpiResource;
+    interface Resource;
     interface HplMsp430GeneralIO as AccelPower;
     interface HplMsp430GeneralIO as AccelCS;
     interface HplMsp430GeneralIO as AccelInt;
-    interface Timer<TMilli> as TimerMs;
   }
 }
 implementation {
@@ -24,79 +25,93 @@ implementation {
     mctl : 0,
     i2coa: 0
   };
-  command error_t Init.init(){
-    call SpiResource.request();
+
+  bool deviceReady = FALSE;
+  command error_t SplitControl.start(){
+    deviceReady = FALSE;
+    call Resource.request();
     return SUCCESS;
   }
 
-  event void SpiResource.granted(){
-    printf("Resource Granted\r\n");
+  event void Resource.granted(){
     call AccelCS.makeOutput();
     call AccelPower.makeOutput();
     call AccelInt.makeInput();
     call AccelCS.set();
-    call AccelPower.clr();
     call AccelPower.set();
-    call TimerMs.startOneShot(100);
+    call BusyWait.wait(10000);
+    signal SplitControl.startDone(SUCCESS);
   }
 
-  event void TimerMs.fired(){
-    uint8_t rx1, rx2, who_am_i, revid;
+  command error_t SplitControl.stop(){
+    call AccelPower.clr();
+  }
+
+  /**
+   * The CMA3000 uses a 16bit data frame. The first 8 bits include the address and the whether
+   * the instruction is a read or write. The second 8 bits are dummy bits.
+   */
+  uint8_t readRegister(uint8_t addr){
+    uint8_t val;
+    call AccelCS.clr();
+    call SpiByte.write((addr << 2));
+    val = call SpiByte.write(0);
+    call AccelCS.set();
+    return val;
+  }
+
+  /**
+   * The CMA3000 uses a 16bit data frame. The first 8 bits include the address and the whether
+   * the instruction is a read or write. The second 8 bits are the data bits to be written to the register.
+   */
+  uint8_t writeRegister(uint8_t addr, uint8_t data){
+    uint8_t val;
+    call AccelCS.clr();
+    call SpiByte.write((addr << 2) + 2);
+    val = call SpiByte.write(data);
+    call AccelCS.set();
+    return val;
+  }
+
+  command error_t Init.init(){
+    uint8_t rx, who_am_i, revid, ctrl, status;
     printf("Timer fired\r\n");
 
-    call AccelCS.clr();
-    call SpiByte.write((CMA3000_WHO_AM_I << 2));
-    who_am_i = call SpiByte.write(0x4);
-    call AccelCS.set();
-
-    call AccelCS.clr();
-    call SpiByte.write((CMA3000_REVID << 2));
-    revid = call SpiByte.write(0x4);
-    call AccelCS.set();
-
+    who_am_i = readRegister(CMA3000_WHO_AM_I);
+    revid = readRegister(CMA3000_REVID);
     printf("WHO %#x, REV %#x\r\n", who_am_i, revid);
 
-    call AccelCS.clr();
-    rx1 = call SpiByte.write((CMA3000_CTRL << 2) + 2);
-    rx2 = call SpiByte.write(0x4);
-    call AccelCS.set();
-    printf("RX1 %#x, RX2 %#x\r\n", rx1, rx2);
+    rx = writeRegister(CMA3000_CTRL,0x4);
+    printf("RX %#x\r\n", rx);
     printf("Set to measure mode\r\n");
-    // Read CTRL register
-    call AccelCS.clr();
-    call SpiByte.write((CMA3000_CTRL << 2));
-    rx1 = call SpiByte.write(0);
-    call AccelCS.set();
+
+    // Read back CTRL register
+    ctrl = readRegister(CMA3000_CTRL);
     // Read status register
-    call AccelCS.clr();
-    call SpiByte.write((CMA3000_STATUS << 2));
-    rx2 = call SpiByte.write(0);
-    call AccelCS.set();
-    printf("CTRL %#x STATUS %#x\r\n", rx1, rx2);
+    status = readRegister(CMA3000_STATUS);
+
+    printf("CTRL %#x STATUS %#x\r\n", ctrl, status);
+    deviceReady = TRUE;
+    return SUCCESS;
   }
 
   task void readAccel_task(){
     accel_t reading;
     /*while(!call AccelInt.get());*/
-    call AccelCS.clr();
-    call SpiByte.write(CMA3000_DOUTX << 2);
-    reading.x = call SpiByte.write(0);
-    call AccelCS.set();
-    call AccelCS.clr();
-    call SpiByte.write(CMA3000_DOUTY << 2);
-    reading.y = call SpiByte.write(0);
-    call AccelCS.set();
-    call AccelCS.clr();
-    call SpiByte.write(CMA3000_DOUTZ << 2);
-    reading.z = call SpiByte.write(0);
-    call AccelCS.set();
+    reading.x = readRegister(CMA3000_DOUTX);
+    reading.y = readRegister(CMA3000_DOUTY);
+    reading.z = readRegister(CMA3000_DOUTZ);
 
     signal Accel.readDone(SUCCESS, reading);
   }
 
   command error_t Accel.read(){
-    post readAccel_task();
-    return SUCCESS;
+    if(deviceReady){
+      post readAccel_task();
+      return SUCCESS;
+    }else {
+      return EBUSY;
+    }
   }
 
   async command const msp430_usci_config_t* Msp430UsciConfigure.getConfiguration() {

@@ -11,8 +11,11 @@ implementation {
 
   AccelTestC -> MainC.Boot;
   AccelTestC.AccelSensor -> Cma3000;
+  AccelTestC.AccelControl -> Cma3000;
+  AccelTestC.AccelInit -> Cma3000;
   AccelTestC.Leds -> LedsC;
   AccelTestC.TimerLED -> TimerLED;
+
   Cma3000.SpiByte -> Spi;
   Cma3000.SpiResource -> Spi;
   Cma3000 <- Spi.Msp430UsciConfigure;
