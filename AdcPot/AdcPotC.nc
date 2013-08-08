@@ -13,8 +13,10 @@ module AdcPotC {
 implementation {
   const msp430adc12_channel_config_t config = {
       inch: INPUT_CHANNEL_A5,
-      sref: REFERENCE_VREFplus_AVss,
-      ref2_5v: REFVOLT_LEVEL_1_5,
+      /*sref: REFERENCE_VREFplus_AVss,*/
+      sref: REFERENCE_AVcc_AVss,
+      /*ref2_5v: REFVOLT_LEVEL_2_5,*/
+      ref2_5v: REFVOLT_LEVEL_NONE,
       adc12ssel: SHT_SOURCE_ACLK,
       adc12div: SHT_CLOCK_DIV_1,
       sht: SAMPLE_HOLD_4_CYCLES,

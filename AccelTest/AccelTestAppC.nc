@@ -1,4 +1,4 @@
-#include "printf.h"
+#include "AccelTest.h"
 
 configuration AccelTestAppC{
 }
@@ -8,14 +8,18 @@ implementation {
   components new Msp430UsciSpiA0C() as Spi;
   components HplMsp430GeneralIOC as GPIO;
   components HplMsp430InterruptC as GPIO_Int;
-  components SerialPrintfC, LedsC, new TimerMilliC() as TimerLED;
+  components LedsC, new TimerMilliC() as TimerLED;
+  components new SerialAMSenderC(AM_ACCEL_MSG);
+
+  components SerialActiveMessageC;
 
   AccelTestC -> MainC.Boot;
   AccelTestC.AccelSensor -> Cma3000;
   AccelTestC.AccelControl -> Cma3000;
-  AccelTestC.AccelInit -> Cma3000;
   AccelTestC.Leds -> LedsC;
   AccelTestC.TimerLED -> TimerLED;
+  AccelTestC.SerialSend -> SerialAMSenderC;
+  AccelTestC.SerialControl -> SerialActiveMessageC;
 
   Cma3000.SpiByte -> Spi;
   Cma3000.SpiResource -> Spi;

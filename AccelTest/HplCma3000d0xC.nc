@@ -16,7 +16,7 @@ generic configuration HplCma3000d0xC() {
 implementation {
   components new HplCma3000d0xP() as Cma;
   components BusyWaitMicroC as BusyWait;
-  components MainC;
+  components MainC, LedsC;
 
   Accel = Cma;
   SpiByte = Cma;
@@ -29,4 +29,6 @@ implementation {
   AccelInt = Cma.AccelInt;
 
   Cma.BusyWait -> BusyWait;
+  Cma.Leds -> LedsC;
+  Cma.Init <- MainC.SoftwareInit;
 }

@@ -12,6 +12,7 @@ generic module HplCma3000d0xP() {
     interface HplMsp430GeneralIO as AccelPower;
     interface HplMsp430GeneralIO as AccelCS;
     interface HplMsp430Interrupt as AccelInt;
+    interface Leds;
   }
 }
 implementation {
@@ -20,34 +21,37 @@ implementation {
     /*ctl0 : UCCKPL | UCMSB | UCMST | UCSYNC,*/
     ctl0 : UCCKPH | UCMSB | UCMST | UCSYNC,
     ctl1 : UCSSEL__SMCLK,
-    br0  : 32,			/* 32x Prescale, 1*2^19 (512 KiHz) */
+    br0  : 32,      /* 32x Prescale, 1*2^19 (512 KiHz) */
     br1  : 0,
     mctl : 0,
     i2coa: 0
   };
 
   bool deviceReady = FALSE;
+  bool readRequest = FALSE;
+  accel_t reading;
+  bool dataReady = FALSE;
+
   command error_t SplitControl.start(){
     deviceReady = FALSE;
     call Resource.request();
     return SUCCESS;
   }
 
-  event void Resource.granted(){
+
+  command error_t Init.init(){
     call AccelCS.makeOutput();
     call AccelPower.makeOutput();
     call AccelCS.set();
-    call AccelPower.set();
-    call BusyWait.wait(10000);
-    signal SplitControl.startDone(SUCCESS);
-  }
-
-  command error_t SplitControl.stop(){
+    // We turn the power off and back on just to make sure a power cycle occurs.
     call AccelPower.clr();
+    call BusyWait.wait(10000);
+    call AccelPower.set();
+    return SUCCESS;
   }
 
   /**
-   * The CMA3000 uses a 16bit data frame. The first 8 bits include the address and the whether
+   * The CMA3000 uses a 16bit data frame. The first 8 bits include the address and whether
    * the instruction is a read or write. The second 8 bits are dummy bits.
    */
   uint8_t readRegister(uint8_t addr){
@@ -72,56 +76,69 @@ implementation {
     return val;
   }
 
-  accel_t reading;
-  bool dataReady = FALSE;
+  inline void resetChip(){
+    call AccelCS.clr();
+    call SpiByte.write((CMA3000_RSTR<< 2) + 2);
+    call SpiByte.write(0x2);
+    call SpiByte.write(0xa);
+    call SpiByte.write(0x4);
+    call AccelCS.set();
+    call BusyWait.wait(10000);
+  }
+
+  event void Resource.granted(){
+    uint8_t status;
+    
+    resetChip();
+    // wait for power on to complete
+    do{
+      status = readRegister(CMA3000_STATUS);
+    }while(status != 0);
+
+    // Loop until the ctrl register is set to what we want
+    writeRegister(CMA3000_CTRL, CMA3000_CONFIG_G_RANGE_2G| CMA3000_CONFIG_MODE_MEAS_100 | CMA3000_CONFIG_I2C_DIS);
+    call BusyWait.wait(30000);
+
+    deviceReady = TRUE;
+    signal SplitControl.startDone(SUCCESS);
+  }
+
+  command error_t SplitControl.stop(){
+    call AccelPower.clr();
+  }
+
+
   task void readAccel_task(){
     atomic{
-      if(dataReady) {
+      if(dataReady){
+        /*reading.x = ((float)readRegister(CMA3000_DOUTX))/normalization;*/
+        /*reading.y = ((float)readRegister(CMA3000_DOUTY))/normalization;*/
+        /*reading.z = ((float)readRegister(CMA3000_DOUTZ))/normalization;*/
         reading.x = readRegister(CMA3000_DOUTX);
         reading.y = readRegister(CMA3000_DOUTY);
         reading.z = readRegister(CMA3000_DOUTZ);
+        signal Accel.readDone(SUCCESS, reading);
+        readRequest = FALSE;
         dataReady = FALSE;
       }
     }
-    atomic signal Accel.readDone(SUCCESS, reading);
-    post readAccel_task();
   }
-
-
-  command error_t Init.init(){
-    uint8_t rx, who_am_i, revid, ctrl, status;
-    printf("Timer fired\r\n");
-
-    who_am_i = readRegister(CMA3000_WHO_AM_I);
-    revid = readRegister(CMA3000_REVID);
-    printf("WHO %#x, REV %#x\r\n", who_am_i, revid);
-
-    rx = writeRegister(CMA3000_CTRL,0x4);
-    printf("RX %#x\r\n", rx);
-    printf("Set to measure mode\r\n");
-
-    // Read back CTRL register
-    ctrl = readRegister(CMA3000_CTRL);
-    // Read status register
-    status = readRegister(CMA3000_STATUS);
-
-    printf("CTRL %#x STATUS %#x\r\n", ctrl, status);
-    // Enable interrupt
-
-    atomic{
-      call AccelInt.edge(TRUE);
-      call AccelInt.clear();
-      call AccelInt.enable();
-    }
-    deviceReady = TRUE;
-    post readAccel_task();
-    return SUCCESS;
-  }
-
 
   command error_t Accel.read(){
-    if(deviceReady){
-      atomic dataReady = TRUE;
+    bool accelIntVal = FALSE;
+    if(!readRequest){
+      readRequest = TRUE;
+      atomic accelIntVal = call AccelInt.getValue();
+      if(accelIntVal){
+        atomic dataReady = TRUE;
+        post readAccel_task();
+      }else{
+        atomic {
+          call AccelInt.edge(TRUE);
+          call AccelInt.clear();
+          call AccelInt.enable();
+        }
+      }
       return SUCCESS;
     }else {
       return EBUSY;
@@ -135,6 +152,9 @@ implementation {
   async event void AccelInt.fired(){
     atomic dataReady = TRUE;
     atomic call AccelInt.clear();
+    atomic call AccelInt.disable();
+    post readAccel_task();
+    call Leds.led1Toggle();
   }
 
 }
