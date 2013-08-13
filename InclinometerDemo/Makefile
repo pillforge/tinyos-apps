@@ -1,0 +1,2 @@
+COMPONENT=InclinometerDemoAppC
+include $(MAKERULES)
