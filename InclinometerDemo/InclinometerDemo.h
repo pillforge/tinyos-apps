@@ -1,5 +1,5 @@
 enum {
-    ACCEL_MSG_ID = 6,
+    AM_ACCELMSG = 6,
 };
 
 #define MAX_BUFFER_SIZE 256

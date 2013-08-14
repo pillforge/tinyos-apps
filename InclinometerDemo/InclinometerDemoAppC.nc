@@ -7,9 +7,10 @@ implementation {
   components InclinometerDemoC, MainC;
   components AngleControllerC as Controller;
   components ActuatorC as Motor;
-  components new DemoSensorC() as Accel;
+  /*components new DemoSensorC() as Accel;*/
+  components new Msp430InternalTemperatureC() as Accel;
   components InclinometerC;
-  components new SerialAMSenderC(ACCEL_MSG_ID), SerialActiveMessageC;
+  components new SerialAMSenderC(AM_ACCELMSG), SerialActiveMessageC;
 
   InclinometerDemoC -> MainC.Boot;
   InclinometerDemoC.AngleControl -> Controller;

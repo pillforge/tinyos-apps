@@ -51,7 +51,8 @@ implementation {
       payload = (AccelMsg*) call SerialSend.getPayload(&msg, sizeof(AccelMsg));
       payload->x = buffer[buffSentIndex];
       call SerialSend.send(AM_BROADCAST_ADDR, &msg, sizeof(AccelMsg));
-    }  }
+    }
+  }
 
   event void AngleControl.setAngleDone(error_t error){
     if(error == SUCCESS){
