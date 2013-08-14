@@ -1,3 +1,7 @@
+#ifndef __INCLINOMETERDEMO_H__
+#define __INCLINOMETERDEMO_H__
+
+
 enum {
     AM_ACCELMSG = 6,
 };
@@ -5,5 +9,8 @@ enum {
 #define MAX_BUFFER_SIZE 256
 
 typedef nx_struct AccelMsg{
-    nx_uint16_t x;
+    nx_int16_t x;
 }AccelMsg;
+
+
+#endif /* end of include guard: __INCLINOMETERDEMO_H__ */

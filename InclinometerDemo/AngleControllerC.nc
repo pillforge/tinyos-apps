@@ -1,8 +1,12 @@
 configuration AngleControllerC {
-  provides interface AngleControl;
   uses {
     interface Read<float>;
     interface Actuate;
+    interface SplitControl as InclinometerControl;
+  }
+  provides {
+    interface SplitControl;
+    interface AngleControl;
   }
   
 }
@@ -13,4 +17,6 @@ implementation {
   AngleControl = AngleControllerP;
   Read = AngleControllerP;
   Actuate = AngleControllerP;
+  InclinometerControl = AngleControllerP;
+  SplitControl = AngleControllerP;
 }

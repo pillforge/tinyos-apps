@@ -25,7 +25,12 @@ class DataLogger:
     def receive(self, src, msg):
         if msg.get_amType() == InclinometerDemo.AM_TYPE:
             x = float(msg.get_x())
-            xangle = math.degrees(math.asin(x/Constants.NORMALIZATION))
+            gravity = x/Constants.NORMALIZATION
+            if gravity > 1:
+                gravity = 1
+            elif gravity < -1:
+                gravity = -1
+            xangle = math.degrees(math.asin(gravity))
             print "{:.4f}\t{}\t{:.3f}".format(time.time(), x, xangle)
 
         sys.stdout.flush()

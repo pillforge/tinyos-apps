@@ -1,21 +1,37 @@
+#include "Inclinometer.h"
 #include <math.h>
 module InclinometerP {
   uses {
-    interface Read<uint16_t> as AccelRead;
+    interface Read<int16_t> as AccelRead;
+    interface SplitControl as AccelControl;
   }
   provides {
     interface Read<float>;
+    interface SplitControl;
   }
 }
 implementation {
 
-  const float normalization = 54.0;
+  command error_t SplitControl.start(){
+    return call AccelControl.start();
+  }
+  command error_t SplitControl.stop(){
+    return call AccelControl.stop();
+  }
+
+  event void AccelControl.startDone(error_t error){
+    signal SplitControl.startDone(error);
+  }
+  event void AccelControl.stopDone(error_t error){
+    signal SplitControl.stopDone(error);
+  }
+
   command error_t Read.read(){
     return call AccelRead.read();
   }
 
-  event void AccelRead.readDone(error_t error, uint16_t data){
-    float inclination = asin(((float) data)/normalization);
+  event void AccelRead.readDone(error_t error, int16_t data){
+    float inclination = asin(((float) data)/NORMALIZATION);
     signal Read.readDone(error, inclination);
   }
 }

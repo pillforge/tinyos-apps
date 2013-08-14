@@ -1,9 +1,11 @@
 configuration InclinometerC {
   uses {
-    interface Read<uint16_t> as AccelRead;
+    interface Read<int16_t> as AccelRead;
+    interface SplitControl as AccelControl;
   }
   provides {
     interface Read<float>;
+    interface SplitControl;
   }
 }
 implementation {
@@ -11,5 +13,7 @@ implementation {
 
   AccelRead = InclinometerP;
   Read = InclinometerP;
+  AccelControl = InclinometerP;
+  SplitControl = InclinometerP;
 
 }
