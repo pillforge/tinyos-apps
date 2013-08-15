@@ -1,7 +1,7 @@
 configuration AngleControllerC {
   uses {
     interface Read<float>;
-    interface Actuate;
+    interface Actuate<uint8_t>;
     interface SplitControl as InclinometerControl;
   }
   provides {

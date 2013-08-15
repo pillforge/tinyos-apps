@@ -59,9 +59,9 @@ implementation {
 
   event void AngleControl.setAngleDone(error_t error){
     if(error == SUCCESS){
-      angleReached = TRUE;
-      buffSentIndex = 0;
-      post sendBuffer();
+      /*angleReached = TRUE;*/
+      /*buffSentIndex = 0;*/
+      /*post sendBuffer();*/
     }
   }
 

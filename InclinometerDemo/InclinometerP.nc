@@ -31,7 +31,14 @@ implementation {
   }
 
   event void AccelRead.readDone(error_t error, int16_t data){
-    float inclination = asin(((float) data)/NORMALIZATION);
+    float inclination;
+    // clip accelerometer data to +1g,-1g.
+    if(data > NORMALIZATION)
+      data = NORMALIZATION;
+    else if (data < -NORMALIZATION)
+      data = -NORMALIZATION;
+
+    inclination = asin(((float) data)/NORMALIZATION) * 180.0/M_PI;
     signal Read.readDone(error, inclination);
   }
 }
