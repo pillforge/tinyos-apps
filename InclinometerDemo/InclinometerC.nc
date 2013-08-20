@@ -16,4 +16,8 @@ implementation {
   AccelControl = InclinometerP;
   SplitControl = InclinometerP;
 
+#ifdef INCLINOMETER_DEBUG
+  components DiagMsgC;
+  InclinometerP.DiagMsg -> DiagMsgC;
+#endif
 }

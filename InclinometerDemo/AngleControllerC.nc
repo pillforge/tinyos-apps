@@ -8,12 +8,18 @@ configuration AngleControllerC {
     interface SplitControl;
     interface AngleControl;
   }
-  
+
 }
 implementation {
   components AngleControllerP;
   components new TimerMilliC();
+  components LedsC;
+  components UserButtonC;
+
   AngleControllerP.Timer -> TimerMilliC;
+  AngleControllerP.Leds -> LedsC;
+  AngleControllerP.Notify -> UserButtonC;
+
   AngleControl = AngleControllerP;
   Read = AngleControllerP;
   Actuate = AngleControllerP;

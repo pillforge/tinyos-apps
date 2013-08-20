@@ -2,8 +2,8 @@
 #define __INCLINOMETER_H__
 
 enum {
-    //NORMALIZATION = 0xffff/4,
-    NORMALIZATION = 54,
+    NORMALIZATION = 0xffff/4,
+    //NORMALIZATION = 54,
 };
 
 

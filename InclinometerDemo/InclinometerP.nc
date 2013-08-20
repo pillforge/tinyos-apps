@@ -4,6 +4,7 @@ module InclinometerP {
   uses {
     interface Read<int16_t> as AccelRead;
     interface SplitControl as AccelControl;
+    interface DiagMsg;
   }
   provides {
     interface Read<float>;
@@ -26,6 +27,7 @@ implementation {
     signal SplitControl.stopDone(error);
   }
 
+
   command error_t Read.read(){
     return call AccelRead.read();
   }
@@ -40,5 +42,12 @@ implementation {
 
     inclination = asin(((float) data)/NORMALIZATION) * 180.0/M_PI;
     signal Read.readDone(error, inclination);
+
+#ifdef INCLINOMETER_DEBUG
+    call DiagMsg.record();
+    call DiagMsg.str("r");
+    call DiagMsg.real(inclination);
+    call DiagMsg.send();
+#endif
   }
 }
