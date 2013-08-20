@@ -15,9 +15,6 @@ implementation {
 
   bool serialReady = FALSE;
   bool angleReached = FALSE;
-  int16_t buffer[MAX_BUFFER_SIZE];
-  uint16_t buffIndex = 0;
-  uint16_t buffSentIndex = 0;
   message_t msg;
 
   enum {
@@ -44,41 +41,20 @@ implementation {
   event void SerialControl.stopDone(error_t error){}
   event void AngleSplitControl.stopDone(error_t error){}
 
-  task void sendBuffer(){
-    AccelMsg* payload;
-    if(buffSentIndex < buffIndex){
-      state = S_TXDATA;
-      payload = (AccelMsg*) call SerialSend.getPayload(&msg, sizeof(AccelMsg));
-      payload->x = buffer[buffSentIndex];
-      call SerialSend.send(AM_BROADCAST_ADDR, &msg, sizeof(AccelMsg));
-    }else{
-      state = S_IDLE;
-      buffIndex = 0;
-    }
-  }
-
   event void AngleControl.setAngleDone(error_t error){
-    if(error == SUCCESS){
-      /*angleReached = TRUE;*/
-      /*buffSentIndex = 0;*/
-      /*post sendBuffer();*/
-    }
+    angleReached = TRUE;
   }
 
   event void AccelRead.readDone(error_t error, int16_t val){
-    if(buffIndex < MAX_BUFFER_SIZE && !angleReached){
-      buffer[buffIndex] = val;
-      buffIndex++;
-    }else if(buffIndex >= MAX_BUFFER_SIZE && state == S_IDLE){
-      buffSentIndex = 0;
-      post sendBuffer();
+    if(serialReady){
+      AccelMsg* payload;
+      payload = (AccelMsg*) call SerialSend.getPayload(&msg, sizeof(AccelMsg));
+      payload->x = val;
+      call SerialSend.send(AM_BROADCAST_ADDR, &msg, sizeof(AccelMsg));
     }
   }
 
   event void SerialSend.sendDone(message_t* bufPtr,error_t error){
-    if(bufPtr == &msg && error == SUCCESS)
-      buffSentIndex++;
-    post sendBuffer();
   }
 
 }

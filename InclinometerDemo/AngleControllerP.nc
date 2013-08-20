@@ -17,8 +17,15 @@ module AngleControllerP {
 implementation {
   float desiredAngle = 0;
   float current_angle = 0;
-  const float Kp = 10.0;
-  const float Kd = 10.0;
+  float Kp = 10.0;
+  float Kd = 20.0;
+
+  uint16_t waitCounter = 0;
+  
+
+  const uint16_t waitPeriod = 100;
+  const float scaling_offset = 140;
+  const float scaling_factor = (200-140)/255.0;
 
   enum {
     S_IDLE,
@@ -59,26 +66,30 @@ implementation {
   task void controller_task(){
     float pid_error;
     bool dir;
-    atomic angle_error = desiredAngle - current_angle;
+    if(state == S_ANGLE_SET && (waitCounter++ >= waitPeriod)){
+      atomic angle_error = desiredAngle - current_angle;
 
-    if(fabs(angle_error) < 3){
-      signal AngleControl.setAngleDone(SUCCESS);
+      if(fabs(angle_error) < 3){
+        signal AngleControl.setAngleDone(SUCCESS);
+      }
+      pid_error = Kp*angle_error + Kd*(angle_error - angle_error_last);
+      angle_error_last = angle_error;
+      dir = (pid_error >= 0);
+      pid_error = fabs(pid_error);
+
+      if(pid_error > 255.0)
+        pid_error = 255.0;
+
+      pid_error = (pid_error * scaling_factor) + scaling_offset;
+
+      call Actuate.write((uint8_t)pid_error, dir);
+    } else {
+      call Actuate.write(0,1);
     }
-    pid_error = Kp*angle_error + Kd*(angle_error - angle_error_last);
-    angle_error_last = angle_error;
-    dir = (pid_error >= 0);
-    pid_error = fabs(pid_error);
-
-    if(pid_error > 255.0)
-      pid_error = 255.0;
-
-    pid_error = pid_error * 200.0/255.0 + 20;
-
-    call Actuate.write((uint8_t)pid_error, dir);
   }
   // Main PID algorithm
   event void Read.readDone(error_t error, float val){
-    if(error == SUCCESS && state == S_ANGLE_SET){
+    if(error == SUCCESS){
       current_angle = val;
       call Leds.led0Off();
       post controller_task();
@@ -86,7 +97,15 @@ implementation {
   }
   event void Notify.notify(button_state_t val){
     if(val == BUTTON_PRESSED)
-      state = S_ANGLE_SET;
+      if(state == S_IDLE){
+        waitCounter = 0;
+        state = S_ANGLE_SET;
+      }
+      else
+        state = S_IDLE;
+    else
+        state = S_IDLE;
+
   }
 }
 
