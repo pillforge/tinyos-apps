@@ -1,0 +1,3 @@
+COMPONENT=BatteryMonitorAppC
+CFLAGS += -DNEW_PRINTF_SEMANTICS
+include $(MAKERULES)
