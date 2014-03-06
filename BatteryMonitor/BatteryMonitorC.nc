@@ -24,7 +24,10 @@ implementation {
     S_CHARGE,
   };
 
-  norace uint8_t state = S_CHARGE;
+  norace uint8_t state = S_TEMP;
+  norace uint16_t charge = 0;
+  norace uint16_t voltage = 0;
+  norace uint16_t temperature = 0;
   norace uint16_t buffer = 0;
 
   event void Boot.booted(){
@@ -42,7 +45,7 @@ implementation {
     buffer = 0xffff;
     call I2CReg.reg_write16(LTC2942_ADDR, LTC2942_ACCUM_CHARGE_MSB_REG, buffer);
 
-    call PeriodTimer.startPeriodic(50);
+    call PeriodTimer.startPeriodic(25);
   }
 
   event void PeriodTimer.fired(){
@@ -67,11 +70,6 @@ implementation {
         call ConvertionTimer.startOneShot(1);
     }
 
-    /*call I2CReg.reg_read(LTC2942_ADDR, LTC2942_CONTROL_REG, &ctrl_reg);*/
-    /*ctrl_reg = (ctrl_reg & 0x3f) | (1 << 6); //temperature*/
-    /*call I2CReg.reg_write(LTC2942_ADDR, LTC2942_CONTROL_REG, ctrl_reg);*/
-
-
   }
 
   event void ConvertionTimer.fired(){
@@ -81,18 +79,14 @@ implementation {
     switch(state){
       case S_TEMP:
         write_reg = LTC2942_TEMP_MSB_REG;
-        /*state = S_VOLT;*/
         break;
       case S_VOLT:
         write_reg = LTC2942_VOLT_MSB_REG;
-        /*state = S_CHARGE;*/
         break;
       default:
         write_reg = LTC2942_ACCUM_CHARGE_MSB_REG;
-        /*state = S_TEMP;*/
         break;
     }
-    /*call I2CPacket.write(I2C_START , LTC2942_ADDR, 1, &write_reg);*/
     call I2CReg.reg_read16(LTC2942_ADDR, write_reg, &buffer);
     /*
      *As the ADC resolution is 14-bit in voltage mode and 10-bit
@@ -100,27 +94,29 @@ implementation {
      *voltage registers (I, J) and the lowest six bits of the
      *combined temperature registers (M, N) are always zero.
      */
-    /*printf("%d %u\n", call LocalTime.get(), buffer);*/
 
-    cur_time = call LocalTime.get();
-    printf("%lu %u\n", (unsigned long int)cur_time, buffer);
+    switch(state){
+      case S_TEMP:
+        state = S_VOLT;
+        temperature = buffer;
+        break;
+      case S_VOLT:
+        state = S_CHARGE;
+        voltage = buffer;
+        break;
+      default:
+        state = S_TEMP;
+        charge = buffer;
+        // Print out
+        cur_time = call LocalTime.get();
+        printf("%lu %u %u %u\n", (unsigned long int)cur_time, temperature, charge, voltage);
+        break;
+    }
   }
 
   async event void I2CPacket.readDone(error_t error, uint16_t addr, uint8_t length, uint8_t* data){}
 
   async event void I2CPacket.writeDone(error_t error, uint16_t addr, uint8_t length, uint8_t* data){
 
-    /*call I2CPacket.read(I2C_RESTART | I2C_STOP, LTC2942_ADDR, 2, (uint8_t *)&buffer);*/
-    /*switch(state){*/
-    /*  case S_TEMP:*/
-    /*    state = S_VOLT;*/
-    /*    break;*/
-    /*  case S_VOLT:*/
-    /*    state = S_CHARGE;*/
-    /*    break;*/
-    /*  default:*/
-    /*    state = S_TEMP;*/
-    /*    break;*/
-    /*}*/
   }
 }
