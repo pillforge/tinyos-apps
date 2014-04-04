@@ -24,11 +24,14 @@ module BatteryMonitorC {
     interface Msp430Compare as TimerCompare1;
     interface Msp430TimerControl as TimerControl0;
     interface Msp430TimerControl as TimerControl1;
-    interface Msp430Timer as TimerB;
+    interface Msp430Timer;
 
     //Internal ADC
     interface Read<uint16_t> as AdcRead;
     interface HplMsp430GeneralIO as AdcInput;
+
+    // Leds
+    interface Leds;
   }
   provides interface AdcConfigure <const msp430adc12_channel_config_t *> as AdcConfigure;
 
@@ -49,10 +52,10 @@ implementation {
 
   const msp430adc12_channel_config_t config = {
       inch: INPUT_CHANNEL_A7,
-      /*sref: REFERENCE_VREFplus_AVss,*/
-      sref: REFERENCE_AVcc_AVss,
-      /*ref2_5v: REFVOLT_LEVEL_2_5,*/
-      ref2_5v: REFVOLT_LEVEL_NONE,
+      sref: REFERENCE_VREFplus_AVss,
+      /*sref: REFERENCE_AVcc_AVss,*/
+      ref2_5v: REFVOLT_LEVEL_2_5,
+      /*ref2_5v: REFVOLT_LEVEL_NONE,*/
       adc12ssel: SHT_SOURCE_ACLK,
       adc12div: SHT_CLOCK_DIV_1,
       sht: SAMPLE_HOLD_4_CYCLES,
@@ -62,10 +65,11 @@ implementation {
 
   typedef msp430_compare_control_t cc_t;
 
-  norace uint8_t state = S_TEMP;
+  norace uint8_t start_state = S_VOLT;
+  norace uint8_t state;
   norace uint8_t button_check_period = 0;
   norace uint8_t current_ctrl_period = 0;
-  norace uint8_t current_ctrl_val = 1;
+  norace uint16_t current_ctrl_val = 0;
   norace bool current_ctrl_dir = TRUE;
   norace uint16_t charge = 0;
   norace uint16_t voltage = 0;
@@ -75,11 +79,16 @@ implementation {
   norace bool should_reset_full = FALSE;
   norace bool should_reset_half = FALSE;
   norace bool should_reset_zero = FALSE;
-  norace uint16_t pwm_clip = 0x3f;
+  // These currents were picked so that they are reasonable for our ADC. They are also reasonable for the range of
+  // currents experienced by an MCR. The resistor used for setting the current is 50.2 ohms
+  norace uint16_t pwm_clip = 5711; // Set current to 50 ma 50*.0502/3.6 * pwm_max
+  norace uint16_t pwm_min = 23; // Set to 0.2 ma
+  norace uint16_t pwm_max = 0x1fff;
 
   event void Boot.booted(){
     cc_t x;
-    call TimerCompare0.setEvent(0xff);
+    state = start_state;
+    call TimerCompare0.setEvent(pwm_max);
     // 0x7ff = 35.062 ma
     // 0x7ff = 17 ma
     // 0x3ff = 8.766 ma
@@ -101,12 +110,13 @@ implementation {
     call TimerControl1.setControl(x);
 
     // Select clock source and count mode
-    call TimerB.setClockSource(PWM_CLK_SRC_SMCLK);
-    call TimerB.setMode(TIMER_UP_MODE); // Starts timer
+    call Msp430Timer.setClockSource(PWM_CLK_SRC_SMCLK);
+    call Msp430Timer.setMode(TIMER_UP_MODE); // Starts timer
 
     // Setup ADC
     call AdcInput.selectModuleFunc();
     call AdcInput.makeInput();
+    printf("Finished Booting...\n");
 
     // Request I2C resource
     call Resource.request();
@@ -127,10 +137,10 @@ implementation {
     call Button2.enable();
 
     /*printf("\nTime Temperature Charge Voltage\n");*/
-    printf("Temperature Charge Voltage\n");
-    call I2CReg.reg_read(LTC2942_ADDR, LTC2942_STATUS_REG, &status);
+    /*call I2CReg.reg_read(LTC2942_ADDR, LTC2942_STATUS_REG, &status);*/
 
     reset_charge(0xffff);
+    printf("Timer started...\n");
     call PeriodTimer.startPeriodic(25);
   }
 
@@ -139,6 +149,7 @@ implementation {
 
     uint8_t ctrl_reg = 0;
     uint8_t ctrl_prefix = 0x04;
+
 
     if(button_check_period==0){
       if(should_reset_zero){
@@ -152,21 +163,26 @@ implementation {
         should_reset_full = FALSE;
       }
     }
-    if(current_ctrl_period == 0){
-      current_ctrl_val = (current_ctrl_val + 1) % pwm_clip;
-      if(current_ctrl_val == 0)
-        current_ctrl_dir = !current_ctrl_dir;
 
-      if(current_ctrl_dir){
-        call TimerCompare1.setEvent(current_ctrl_val);
-      } else{
-        call TimerCompare1.setEvent(pwm_clip-current_ctrl_val);
-      }
-    }
+    /*if(current_ctrl_period == 0){*/
+      /*current_ctrl_val = (current_ctrl_val + 1) % pwm_clip;*/
+      /*if(current_ctrl_val == 0)*/
+        /*current_ctrl_dir = !current_ctrl_dir;*/
+
+      /*if(current_ctrl_dir){*/
+        /*call Leds.led0Toggle();*/
+        /*call TimerCompare1.setEvent(pwm_min + current_ctrl_val);*/
+      /*} else{*/
+        /*call TimerCompare1.setEvent(pwm_min + pwm_clip-current_ctrl_val);*/
+      /*}*/
+    /*}*/
+    call TimerCompare1.setEvent(pwm_min);
 
     button_check_period = (button_check_period+1)%5;
 
-    current_ctrl_period = (current_ctrl_period+1)%2;
+    /*current_ctrl_period = (current_ctrl_period+1)%10;*/
+    /*current_ctrl_period = (current_ctrl_period+1)%2;*/
+    current_ctrl_period = (current_ctrl_period+1)%1;
 
     switch(state){
       case S_TEMP:
@@ -233,11 +249,12 @@ implementation {
         charge = buffer;
         break;
       default:
-        state = S_TEMP;
+        state = start_state;
         // Print out
         cur_time = call LocalTime.get();
         /*printf("%lu %u %u %u %u\n", (unsigned long int)cur_time, temperature, charge, voltage, int_adc);*/
-        printf("%lu %u %u %u %u %u %u\n", (unsigned long int)cur_time, temperature, charge, voltage, int_adc, current_ctrl_dir, current_ctrl_val);
+        /*printf("%lu %u %u %u %u %u %u\n", (unsigned long int)cur_time, temperature, charge, voltage, int_adc, current_ctrl_dir, current_ctrl_val);*/
+        printf("%lu %u %u %u\n", (unsigned long int)cur_time, charge, voltage, int_adc);
         /*printf("%u %u %u\n", temperature, charge, voltage);*/
         break;
     }
@@ -268,7 +285,7 @@ implementation {
 
   async event void TimerCompare0.fired(){ }
   async event void TimerCompare1.fired(){ }
-  async event void TimerB.overflow(){ }
+  async event void Msp430Timer.overflow(){ }
 
   // Adc Configuration
   async command const msp430adc12_channel_config_t* AdcConfigure.getConfiguration(){
