@@ -73,6 +73,7 @@ implementation {
   norace bool current_ctrl_dir = TRUE;
   norace uint16_t charge = 0;
   norace uint16_t voltage = 0;
+  norace bool voltage_ready = FALSE;
   norace uint16_t temperature = 0;
   norace uint16_t int_adc = 0;
   norace uint16_t buffer = 0;
@@ -84,6 +85,12 @@ implementation {
   norace uint16_t pwm_clip = 5711; // Set current to 50 ma 50*.0502/3.6 * pwm_max
   norace uint16_t pwm_min = 23; // Set to 0.2 ma
   norace uint16_t pwm_max = 0x1fff;
+
+  norace int16_t depletion_count = 0;
+  norace bool depletion_alert = FALSE;
+  const uint16_t depletion_threshold = 10;
+  /*const uint16_t depleted_voltage = 29400;*/
+  const uint16_t depleted_voltage = 44000;
 
   event void Boot.booted(){
     cc_t x;
@@ -130,8 +137,18 @@ implementation {
     call I2CReg.reg_write16(LTC2942_ADDR, LTC2942_ACCUM_CHARGE_MSB_REG, buffer);
   }
 
+  void reset_state_variables(){
+    current_ctrl_val = 0;
+    current_ctrl_dir = TRUE;
+    current_ctrl_period  = 1;
+    depletion_count = 0;
+    depletion_alert = FALSE;
+    call Leds.led1Off();
+
+  }
+
   event void Resource.granted(){
-    uint8_t status = 0;
+    /*uint8_t status = 0;*/
 
     call Button1.enable();
     call Button2.enable();
@@ -141,7 +158,7 @@ implementation {
 
     reset_charge(0xffff);
     printf("Timer started...\n");
-    call PeriodTimer.startPeriodic(25);
+    call PeriodTimer.startPeriodic(20);
   }
 
 
@@ -158,31 +175,56 @@ implementation {
       }else if(should_reset_half){
         reset_charge(0x7fff);
         should_reset_half = FALSE;
+        reset_state_variables();
       }else if(should_reset_full){
         reset_charge(0xffff);
         should_reset_full = FALSE;
+        reset_state_variables();
+      }
+    }
+    // If battery is completely depleted, turn off the current sink.
+    // Here we are creating hysteresis so that a single (faulty) voltage reading doesn't trigger a depletion alert
+    // Once depletion_count >= depletion_threshold, the depletion alert is implicitly triggered.
+    //
+    if(depletion_count < depletion_threshold) {
+
+      if(voltage_ready){
+        if(voltage < depleted_voltage){
+          depletion_count++;
+
+          // Battery is depleted
+          if(depletion_count >= depletion_threshold){
+            call TimerCompare1.setEvent(0);
+            call Leds.led1On();
+            printf("0 0 0 0\n");
+            depletion_alert = TRUE;
+          }
+        }else if (depletion_count > 0){
+          depletion_count--;
+        }
+        voltage_ready = FALSE;
       }
     }
 
-    /*if(current_ctrl_period == 0){*/
-      /*current_ctrl_val = (current_ctrl_val + 1) % pwm_clip;*/
-      /*if(current_ctrl_val == 0)*/
-        /*current_ctrl_dir = !current_ctrl_dir;*/
+    if(!depletion_alert && (current_ctrl_period == 0)){
+      current_ctrl_val = (current_ctrl_val + 1) % pwm_clip;
+      if(current_ctrl_val == 0)
+        current_ctrl_dir = !current_ctrl_dir;
 
-      /*if(current_ctrl_dir){*/
-        /*call Leds.led0Toggle();*/
-        /*call TimerCompare1.setEvent(pwm_min + current_ctrl_val);*/
-      /*} else{*/
-        /*call TimerCompare1.setEvent(pwm_min + pwm_clip-current_ctrl_val);*/
-      /*}*/
-    /*}*/
-    call TimerCompare1.setEvent(pwm_min);
+      if(current_ctrl_dir){
+        call Leds.led0Toggle();
+        call TimerCompare1.setEvent(pwm_min + current_ctrl_val);
+      } else{
+        call TimerCompare1.setEvent(pwm_min + pwm_clip-current_ctrl_val);
+      }
+    }
+    /*call TimerCompare1.setEvent(pwm_clip);*/
 
     button_check_period = (button_check_period+1)%5;
 
     /*current_ctrl_period = (current_ctrl_period+1)%10;*/
     /*current_ctrl_period = (current_ctrl_period+1)%2;*/
-    current_ctrl_period = (current_ctrl_period+1)%1;
+    current_ctrl_period = (current_ctrl_period+1)%5;
 
     switch(state){
       case S_TEMP:
@@ -243,6 +285,7 @@ implementation {
       case S_VOLT:
         state = S_CHARGE;
         voltage = buffer;
+        voltage_ready = TRUE;
         break;
       case S_CHARGE:
         state = S_ADC;
@@ -254,7 +297,8 @@ implementation {
         cur_time = call LocalTime.get();
         /*printf("%lu %u %u %u %u\n", (unsigned long int)cur_time, temperature, charge, voltage, int_adc);*/
         /*printf("%lu %u %u %u %u %u %u\n", (unsigned long int)cur_time, temperature, charge, voltage, int_adc, current_ctrl_dir, current_ctrl_val);*/
-        printf("%lu %u %u %u\n", (unsigned long int)cur_time, charge, voltage, int_adc);
+        if(!depletion_alert)
+          printf("%lu %u %u %u\n", (unsigned long int)cur_time, charge, voltage, int_adc);
         /*printf("%u %u %u\n", temperature, charge, voltage);*/
         break;
     }

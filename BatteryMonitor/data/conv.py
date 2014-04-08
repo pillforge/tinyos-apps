@@ -25,7 +25,7 @@ while True:
         x = int(data)
         if args.voltage:
             V = 6 * float(x)/0xffff
-            print "{} {:.2f}".format(x, V) # Celcius
+            print "{} {:.3f}".format(x, V) # Celcius
         else: # Default to temperature
             T = 600 * float(x)/0xffff
             print "{} {:.2f}".format(x, T - 273) # Celcius
