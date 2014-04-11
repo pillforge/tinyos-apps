@@ -6,6 +6,10 @@
 #define MSP430_I2C_MASTER_MODE UCMST // single-master mode
 #define MSP430_I2C_DIVISOR 80 // 100khz
 
+#define USE_CONSTANT_CURRENT
+#define CHECK_BATTERY_DEPLETION
+#define USE_LTC2942
+
 module BatteryMonitorC {
   uses {
     interface Boot;
@@ -27,20 +31,25 @@ module BatteryMonitorC {
     interface Msp430Timer;
 
     //Internal ADC
-    interface Read<uint16_t> as AdcRead;
-    interface HplMsp430GeneralIO as AdcInput;
+    interface Read<uint16_t> as CurrentRead;
+    interface Read<uint16_t> as VoltageRead;
+
+    interface HplMsp430GeneralIO as CurrentAdcInput;
+    interface HplMsp430GeneralIO as VoltageAdcInput;
 
     // Leds
     interface Leds;
   }
-  provides interface AdcConfigure <const msp430adc12_channel_config_t *> as AdcConfigure;
+  provides interface AdcConfigure <const msp430adc12_channel_config_t *> as CurrentAdcConfigure;
+  provides interface AdcConfigure <const msp430adc12_channel_config_t *> as VoltageAdcConfigure;
 
 }
 implementation {
 
   enum  {
-    S_TEMP,
+    /*S_TEMP,*/
     S_VOLT,
+    S_CURRENT,
     S_CHARGE,
   };
   enum {
@@ -49,7 +58,7 @@ implementation {
     TIMER_UP_MODE = 1,
   };
 
-  const msp430adc12_channel_config_t config = {
+  const msp430adc12_channel_config_t current_adc_config = {
       inch: INPUT_CHANNEL_A7,
       sref: REFERENCE_VREFplus_AVss,
       /*sref: REFERENCE_AVcc_AVss,*/
@@ -61,11 +70,23 @@ implementation {
       sampcon_ssel: SAMPCON_SOURCE_SMCLK,
       sampcon_id: SAMPCON_CLOCK_DIV_1
   };
+  const msp430adc12_channel_config_t voltage_adc_config = {
+      inch: INPUT_CHANNEL_A6,
+      sref: REFERENCE_VREFplus_AVss,
+      ref2_5v: REFVOLT_LEVEL_1_5,
+      adc12ssel: SHT_SOURCE_ACLK,
+      adc12div: SHT_CLOCK_DIV_1,
+      sht: SAMPLE_HOLD_4_CYCLES,
+      sampcon_ssel: SAMPCON_SOURCE_SMCLK,
+      sampcon_id: SAMPCON_CLOCK_DIV_1
+  };
 
   typedef msp430_compare_control_t cc_t;
 
   task void gather_data();
   task void trigger_data();
+  void reg_write_retry(uint16_t slave_addr, uint8_t reg, uint8_t val);
+  void reg_read_retry(uint16_t slave_addr, uint8_t reg, uint8_t* val);
 
   norace uint8_t start_state = S_VOLT;
   norace uint8_t state;
@@ -74,30 +95,43 @@ implementation {
   norace uint16_t current_ctrl_val = 0;
   norace bool current_ctrl_dir = TRUE;
   norace uint16_t charge = 0;
-  norace uint16_t voltage = 0;
+  norace uint16_t voltage_adc = 0;
+  norace uint16_t current_adc= 0;
   norace bool voltage_ready = FALSE;
   norace uint16_t temperature = 0;
-  norace uint16_t int_adc = 0;
   norace uint16_t buffer = 0;
   norace bool should_reset_full = FALSE;
   norace bool should_reset_half = FALSE;
   norace bool should_reset_zero = FALSE;
+
+  norace uint8_t i2c_charge_ctr = 0;
   // These currents were picked so that they are reasonable for our ADC. They are also reasonable for the range of
   // currents experienced by an MCR. The resistor used for setting the current is 50.2 ohms
-  norace uint16_t pwm_clip = 4568; // Set current to 50 ma 50*.0502/3.6 * pwm_max
+  norace uint16_t pwm_clip = 4568; // Set current to 40 ma 40*.0502/3.6 * pwm_max
   norace uint16_t pwm_min = 23; // Set to 0.2 ma
   norace uint16_t pwm_max = 0x1fff;
   norace uint16_t pwm_val = 0;
 
+  const uint16_t const_pwm_5ma =  (uint32_t)5*0x1fff*0.0502/3.6;
+  const uint16_t const_pwm_10ma = (uint32_t)10*0x1fff*0.0502/3.6;
+  const uint16_t const_pwm_20ma = (uint32_t)20*0x1fff*0.0502/3.6;
+  const uint16_t const_pwm_30ma = (uint32_t)30*0x1fff*0.0502/3.6;
+
+  norace uint16_t const_pwm_val;
+
   norace int16_t depletion_count = 0;
   norace bool depletion_alert = FALSE;
   const uint16_t depletion_threshold = 10;
-  const uint16_t depleted_voltage = 29400;
+  /*const uint16_t depleted_voltage = 29400;*/
+  const uint16_t depleted_voltage = 819; // with 0-1.5V ADC with 2.4V vref
   /*const uint16_t depleted_voltage = 44000;*/
 
   event void Boot.booted(){
     cc_t x;
     state = start_state;
+
+    const_pwm_val = const_pwm_10ma; // Change this as desired
+
     call TimerCompare0.setEvent(pwm_max);
     // 0x7ff = 35.062 ma
     // 0x7ff = 17 ma
@@ -123,9 +157,8 @@ implementation {
     call Msp430Timer.setClockSource(PWM_CLK_SRC_SMCLK);
     call Msp430Timer.setMode(TIMER_UP_MODE); // Starts timer
 
-    // Setup ADC
-    call AdcInput.selectModuleFunc();
-    call AdcInput.makeInput();
+    call CurrentAdcInput.makeInput();
+    call VoltageAdcInput.makeInput();
     printf("Finished Booting...\n");
 
     // Request I2C resource
@@ -135,9 +168,12 @@ implementation {
   void reset_charge(uint16_t val){
     // Set accumulated charge to 0xffff (Full battery)
     // Shutdown analog section
-    call I2CReg.reg_write(LTC2942_ADDR, LTC2942_CONTROL_REG, 1);
+#ifdef USE_LTC2942
+    reg_write_retry(LTC2942_ADDR, LTC2942_CONTROL_REG, 5);
     buffer = val;
     call I2CReg.reg_write16(LTC2942_ADDR, LTC2942_ACCUM_CHARGE_MSB_REG, buffer);
+    reg_write_retry(LTC2942_ADDR, LTC2942_CONTROL_REG, 4);
+#endif
   }
 
   void reset_state_variables(){
@@ -151,13 +187,13 @@ implementation {
   }
 
   event void Resource.granted(){
-    /*uint8_t status = 0;*/
+    uint8_t status = 0;
 
     call Button1.enable();
     call Button2.enable();
 
     /*printf("\nTime Temperature Charge Voltage\n");*/
-    /*call I2CReg.reg_read(LTC2942_ADDR, LTC2942_STATUS_REG, &status);*/
+    reg_read_retry(LTC2942_ADDR, LTC2942_STATUS_REG, &status);
 
     reset_charge(0xffff);
     printf("Timer started...\n");
@@ -166,8 +202,6 @@ implementation {
 
 
   event void PeriodTimer.fired(){
-
-
 
     if(button_check_period==0){
       if(should_reset_zero){
@@ -187,10 +221,11 @@ implementation {
     // Here we are creating hysteresis so that a single (faulty) voltage reading doesn't trigger a depletion alert
     // Once depletion_count >= depletion_threshold, the depletion alert is implicitly triggered.
     //
+#ifdef CHECK_BATTERY_DEPLETION
     if(depletion_count < depletion_threshold) {
 
       if(voltage_ready){
-        if(voltage < depleted_voltage){
+        if(voltage_adc < depleted_voltage){
           depletion_count++;
 
           // Battery is depleted
@@ -206,18 +241,23 @@ implementation {
         voltage_ready = FALSE;
       }
     }
+#endif
 
     if(!depletion_alert && (current_ctrl_period == 0)){
+#ifdef USE_CONSTANT_CURRENT
+      pwm_val = const_pwm_val;
+#else
       current_ctrl_val = (current_ctrl_val + 1) % pwm_clip;
       if(current_ctrl_val == 0)
         current_ctrl_dir = !current_ctrl_dir;
 
       if(current_ctrl_dir){
-        call Leds.led0Toggle();
         pwm_val = pwm_min + current_ctrl_val;
       } else{
         pwm_val = pwm_min + pwm_clip-current_ctrl_val;
       }
+#endif
+      call Leds.led0Toggle();
       call TimerCompare1.setEvent(pwm_val);
     }
     /*call TimerCompare1.setEvent(pwm_clip);*/
@@ -236,37 +276,89 @@ implementation {
   // that terminates when the gathered data is printed.
   task void trigger_data(){
 
-    uint8_t ctrl_reg = 0;
-    uint8_t ctrl_prefix = 0x04;
+    /*uint8_t ctrl_reg = 0;*/
+    /*uint8_t ctrl_prefix = 0x04;*/
     switch(state){
-      case S_TEMP:
-        ctrl_reg = ctrl_prefix | LTC2942_ADC_MODE_TEMPERATURE;
-        call I2CReg.reg_write(LTC2942_ADDR, LTC2942_CONTROL_REG, ctrl_reg);
-        call ConvertionTimer.startOneShot(10);
-        break;
+      /*case S_TEMP:*/
+      /*  ctrl_reg = ctrl_prefix | LTC2942_ADC_MODE_TEMPERATURE;*/
+      /*  reg_write_retry(LTC2942_ADDR, LTC2942_CONTROL_REG, ctrl_reg);*/
+      /*  call ConvertionTimer.startOneShot(10);*/
+      /*  break;*/
       case S_VOLT:
-        ctrl_reg = ctrl_prefix | LTC2942_ADC_MODE_VOLTAGE;
-        call I2CReg.reg_write(LTC2942_ADDR, LTC2942_CONTROL_REG, ctrl_reg);
+        /*ctrl_reg = ctrl_prefix | LTC2942_ADC_MODE_VOLTAGE;*/
+        /*reg_write_retry(LTC2942_ADDR, LTC2942_CONTROL_REG, ctrl_reg);*/
         P7DIR |= 3;
         P7OUT |= 2;
+        call VoltageRead.read();
+        break;
+      case S_CURRENT:
         // internal Adc takes about 15 ms while the LTC2942 takes 10. So request both at the same time
-        call AdcRead.read();
+        call CurrentRead.read();
         break;
       case S_CHARGE:
         // No need to write anything, proceed with reading the data
+        /*call ConvertionTimer.startOneShot(5);*/
         post gather_data();
         break;
     }
 
   }
 
+  void reg_read_retry(uint16_t slave_addr, uint8_t reg, uint8_t *val){
+#ifdef USE_LTC2942
+    error_t i2c_err;
+    while(1){
+      i2c_err = call I2CReg.reg_read(slave_addr, reg, val);
+      if(i2c_err != SUCCESS){
+        call Leds.led2On();
+        call Leds.led2Off();
+      }else
+        break;
+    }
+#endif
+  }
+
+  void reg_read16_retry(uint16_t slave_addr, uint8_t reg, uint16_t *val){
+#ifdef USE_LTC2942
+    error_t i2c_err;
+    while(1){
+      i2c_err = call I2CReg.reg_read16(slave_addr, reg, val);
+      if(i2c_err != SUCCESS){
+        call Leds.led2On();
+        call Leds.led2Off();
+      }else
+        break;
+    }
+#endif
+  }
+  void reg_write_retry(uint16_t slave_addr, uint8_t reg, uint8_t val){
+#ifdef USE_LTC2942
+    error_t i2c_err;
+    while(1){
+      i2c_err = call I2CReg.reg_write(slave_addr, reg, val);
+      if(i2c_err != SUCCESS){
+        call Leds.led2On();
+        call Leds.led2Off();
+      }else
+        break;
+    }
+#endif
+  }
+
   event void ConvertionTimer.fired(){
     post gather_data();
   }
 
-  event void AdcRead.readDone(error_t result, uint16_t data){
-    int_adc = data;
+  event void CurrentRead.readDone(error_t result, uint16_t data){
+    current_adc = data;
     P7OUT &= ~2;
+    // Fire timer so data can be sent
+    post gather_data();
+
+  }
+
+  event void VoltageRead.readDone(error_t result, uint16_t data){
+    voltage_adc = data;
     // Fire timer so data can be sent
     post gather_data();
   }
@@ -280,17 +372,22 @@ implementation {
     P7OUT |= 1;
 
     switch(state){
-      case S_TEMP:
-        write_reg = LTC2942_TEMP_MSB_REG;
-        break;
-      case S_VOLT:
-        write_reg = LTC2942_VOLT_MSB_REG;
-        break;
+      /*case S_TEMP:*/
+      /*  write_reg = LTC2942_TEMP_MSB_REG;*/
+      /*  break;*/
+      /*case S_VOLT:*/
+      /*  write_reg = LTC2942_VOLT_MSB_REG;*/
+      /*  break;*/
       case S_CHARGE:
-        write_reg = LTC2942_ACCUM_CHARGE_MSB_REG;
+        i2c_charge_ctr = (i2c_charge_ctr + 1) % 20;
+        if(i2c_charge_ctr == 0){
+          write_reg = LTC2942_ACCUM_CHARGE_MSB_REG;
+          reg_read16_retry(LTC2942_ADDR, write_reg, &buffer);
+        }else {
+          buffer = 0;
+        }
         break;
     }
-    call I2CReg.reg_read16(LTC2942_ADDR, write_reg, &buffer);
 
     /*
      *As the ADC resolution of the Coulomb counter is 14-bit in voltage mode and 10-bit
@@ -301,15 +398,18 @@ implementation {
 
     // State changes only happen here
     switch(state){
-      case S_TEMP:
-        state = S_VOLT;
-        temperature = buffer;
+      /*case S_TEMP:*/
+      /*  state = S_VOLT;*/
+      /*  temperature = buffer;*/
+      /*  post trigger_data();*/
+      /*  break;*/
+      case S_VOLT:
+        voltage_ready = TRUE;
+        state = S_CURRENT;
         post trigger_data();
         break;
-      case S_VOLT:
+      case S_CURRENT:
         state = S_CHARGE;
-        voltage = buffer;
-        voltage_ready = TRUE;
         post trigger_data();
         break;
       default:
@@ -317,10 +417,10 @@ implementation {
         state = start_state;
         // Print out
         cur_time = call LocalTime.get();
-        /*printf("%lu %u %u %u %u\n", (unsigned long int)cur_time, temperature, charge, voltage, int_adc);*/
-        /*printf("%lu %u %u %u %u %u %u\n", (unsigned long int)cur_time, temperature, charge, voltage, int_adc, current_ctrl_dir, current_ctrl_val);*/
+        /*printf("%lu %u %u %u %u\n", (unsigned long int)cur_time, temperature, charge, voltage, current_adc);*/
+        /*printf("%lu %u %u %u %u %u %u\n", (unsigned long int)cur_time, temperature, charge, voltage, current_adc, current_ctrl_dir, current_ctrl_val);*/
         if(!depletion_alert)
-          printf("%lu %u %u %u %u\n", (unsigned long int)cur_time, charge, voltage, int_adc, pwm_val);
+          printf("%lu %u %u %u %u\n", (unsigned long int)cur_time, charge, voltage_adc, current_adc, pwm_val);
         /*printf("%u %u %u\n", temperature, charge, voltage);*/
         break;
     }
@@ -355,8 +455,12 @@ implementation {
   async event void Msp430Timer.overflow(){ }
 
   // Adc Configuration
-  async command const msp430adc12_channel_config_t* AdcConfigure.getConfiguration(){
-    return &config;
+  async command const msp430adc12_channel_config_t* CurrentAdcConfigure.getConfiguration(){
+    return &current_adc_config;
+  }
+
+  async command const msp430adc12_channel_config_t* VoltageAdcConfigure.getConfiguration(){
+    return &voltage_adc_config;
   }
 
 }
