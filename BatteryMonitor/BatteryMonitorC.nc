@@ -13,11 +13,18 @@
 module BatteryMonitorC {
   uses {
     interface Boot;
+
+    // I2C
     interface I2CReg;
     interface I2CPacket<TI2CBasicAddr>;
+    interface BusyWait<TMicro, uint16_t>;
     interface Resource;
+    interface HplMsp430GeneralIO as SDA;
+    interface HplMsp430GeneralIO as SCL;
+
     interface Timer<TMilli> as PeriodTimer;
     interface Timer<TMilli> as ConvertionTimer;
+    interface Timer<TMilli> as PseudoWdt;
     interface LocalTime<TMilli>;
     interface Notify<bool> as Button1;
     interface Notify<bool> as Button2;
@@ -30,6 +37,9 @@ module BatteryMonitorC {
     interface Msp430TimerControl as TimerControl1;
     interface Msp430Timer;
 
+    // PWM Value Generator
+    interface Get<uint16_t> as PwmVal;
+
     //Internal ADC
     interface Read<uint16_t> as CurrentRead;
     interface Read<uint16_t> as VoltageRead;
@@ -39,6 +49,8 @@ module BatteryMonitorC {
 
     // Leds
     interface Leds;
+
+
   }
   provides interface AdcConfigure <const msp430adc12_channel_config_t *> as CurrentAdcConfigure;
   provides interface AdcConfigure <const msp430adc12_channel_config_t *> as VoltageAdcConfigure;
@@ -48,7 +60,9 @@ implementation {
 
   enum  {
     /*S_TEMP,*/
-    S_VOLT,
+    S_VOLT, // LTC2942
+    S_ADC_VOLT,
+    S_VOLT_I2C_READ,
     S_CURRENT,
     S_CHARGE,
   };
@@ -57,6 +71,7 @@ implementation {
     PWM_CLK_SRC_SMCLK= 2,
     TIMER_UP_MODE = 1,
   };
+
 
   const msp430adc12_channel_config_t current_adc_config = {
       inch: INPUT_CHANNEL_A7,
@@ -87,56 +102,59 @@ implementation {
   task void trigger_data();
   void reg_write_retry(uint16_t slave_addr, uint8_t reg, uint8_t val);
   void reg_read_retry(uint16_t slave_addr, uint8_t reg, uint8_t* val);
+  void reset_i2c();
 
   norace uint8_t start_state = S_VOLT;
   norace uint8_t state;
   norace uint8_t button_check_period = 0;
   norace uint8_t current_ctrl_period = 0;
-  norace uint16_t current_ctrl_val = 0;
   norace bool current_ctrl_dir = TRUE;
   norace uint16_t charge = 0;
+  norace uint16_t voltage_i2c = 0;
   norace uint16_t voltage_adc = 0;
   norace uint16_t current_adc= 0;
   norace bool voltage_ready = FALSE;
-  norace uint16_t temperature = 0;
-  norace uint16_t buffer = 0;
+  /*norace uint16_t temperature = 0;*/
   norace bool should_reset_full = FALSE;
   norace bool should_reset_half = FALSE;
   norace bool should_reset_zero = FALSE;
 
+  // Voltage state variables
+  norace bool int_voltage_read = FALSE;
+  norace bool i2c_voltage_read = FALSE;
+
+
+  // Stats
+  int32_t current_mean = 0;
+  int32_t current_var = 0;
+  uint8_t current_shift = 3;
+
+  // I2C variables
+  norace uint8_t i2c_data[2];
+  norace bool i2c_error = SUCCESS;
   norace uint8_t i2c_charge_ctr = 0;
-  // These currents were picked so that they are reasonable for our ADC. They are also reasonable for the range of
-  // currents experienced by an MCR. The resistor used for setting the current is 50.2 ohms
-  norace uint16_t pwm_clip = 4568; // Set current to 40 ma 40*.0502/3.6 * pwm_max
-  norace uint16_t pwm_min = 23; // Set to 0.2 ma
-  norace uint16_t pwm_max = 0x1fff;
+  norace uint16_t buffer = 0;
+  norace uint8_t buffer16[16];
+
   norace uint16_t pwm_val = 0;
+  norace uint16_t pwm_max = 0x1fff;
 
-  const uint16_t const_pwm_5ma =  (uint32_t)5*0x1fff*0.0502/3.6;
-  const uint16_t const_pwm_10ma = (uint32_t)10*0x1fff*0.0502/3.6;
-  const uint16_t const_pwm_20ma = (uint32_t)20*0x1fff*0.0502/3.6;
-  const uint16_t const_pwm_30ma = (uint32_t)30*0x1fff*0.0502/3.6;
-
-  norace uint16_t const_pwm_val;
 
   norace int16_t depletion_count = 0;
   norace bool depletion_alert = FALSE;
+  norace bool first_boot = TRUE;
   const uint16_t depletion_threshold = 10;
-  /*const uint16_t depleted_voltage = 29400;*/
-  const uint16_t depleted_voltage = 819; // with 0-1.5V ADC with 2.4V vref
+  const uint16_t depleted_voltage = 29400; // Voltage i2c
+  /*const uint16_t depleted_voltage = 819; // with 0-1.5V ADC with 2.4V vref*/
   /*const uint16_t depleted_voltage = 44000;*/
 
   event void Boot.booted(){
     cc_t x;
     state = start_state;
-
-    const_pwm_val = const_pwm_10ma; // Change this as desired
+    first_boot = TRUE;
 
     call TimerCompare0.setEvent(pwm_max);
-    // 0x7ff = 35.062 ma
-    // 0x7ff = 17 ma
-    // 0x3ff = 8.766 ma
-    call TimerCompare1.setEvent(current_ctrl_val);
+    call TimerCompare1.setEvent(0);
 
     call TimerControl0.setControlAsCompare();
     call TimerControl1.setControlAsCompare();
@@ -161,6 +179,12 @@ implementation {
     call VoltageAdcInput.makeInput();
     printf("Finished Booting...\n");
 
+    call Button1.enable();
+    call Button2.enable();
+
+    P7DIR |= 7; // debug
+
+    reset_i2c();
     // Request I2C resource
     call Resource.request();
   }
@@ -170,14 +194,12 @@ implementation {
     // Shutdown analog section
 #ifdef USE_LTC2942
     reg_write_retry(LTC2942_ADDR, LTC2942_CONTROL_REG, 5);
-    buffer = val;
-    call I2CReg.reg_write16(LTC2942_ADDR, LTC2942_ACCUM_CHARGE_MSB_REG, buffer);
+    i2c_error |= call I2CReg.reg_write16(LTC2942_ADDR, LTC2942_ACCUM_CHARGE_MSB_REG, val);
     reg_write_retry(LTC2942_ADDR, LTC2942_CONTROL_REG, 4);
 #endif
   }
 
   void reset_state_variables(){
-    current_ctrl_val = 0;
     current_ctrl_dir = TRUE;
     current_ctrl_period  = 1;
     depletion_count = 0;
@@ -189,15 +211,28 @@ implementation {
   event void Resource.granted(){
     uint8_t status = 0;
 
-    call Button1.enable();
-    call Button2.enable();
 
-    /*printf("\nTime Temperature Charge Voltage\n");*/
-    reg_read_retry(LTC2942_ADDR, LTC2942_STATUS_REG, &status);
+    i2c_error = SUCCESS;
+    if (first_boot){
 
-    reset_charge(0xffff);
-    printf("Timer started...\n");
+      /*printf("\nTime Temperature Charge Voltage\n");*/
+
+      reset_charge(0xffff);
+      i2c_error = call I2CReg.reg_readBlock(LTC2942_ADDR, LTC2942_STATUS_REG,16, buffer16);
+      status = buffer16[0];
+      if(i2c_error == SUCCESS){
+        // No need to reset again
+        first_boot = FALSE;
+      }
+      printf("I2C Status %x\n", status);
+    }
     call PeriodTimer.startPeriodic(50);
+    /*call PeriodTimer.startPeriodic(100);*/
+    /*call PseudoWdt.startPeriodic(100);*/
+  }
+
+  event void PseudoWdt.fired(){
+
   }
 
 
@@ -225,7 +260,7 @@ implementation {
     if(depletion_count < depletion_threshold) {
 
       if(voltage_ready){
-        if(voltage_adc < depleted_voltage){
+        if(voltage_i2c < depleted_voltage){
           depletion_count++;
 
           // Battery is depleted
@@ -244,21 +279,12 @@ implementation {
 #endif
 
     if(!depletion_alert && (current_ctrl_period == 0)){
-#ifdef USE_CONSTANT_CURRENT
-      pwm_val = const_pwm_val;
-#else
-      current_ctrl_val = (current_ctrl_val + 1) % pwm_clip;
-      if(current_ctrl_val == 0)
-        current_ctrl_dir = !current_ctrl_dir;
-
-      if(current_ctrl_dir){
-        pwm_val = pwm_min + current_ctrl_val;
-      } else{
-        pwm_val = pwm_min + pwm_clip-current_ctrl_val;
-      }
-#endif
-      call Leds.led0Toggle();
-      call TimerCompare1.setEvent(pwm_val);
+      // Only get a new value when current_adc has stabilized
+      if(current_var < 100){
+        pwm_val = call PwmVal.get();
+        call Leds.led0Toggle();
+        call TimerCompare1.setEvent(pwm_val);
+      }  
     }
     /*call TimerCompare1.setEvent(pwm_clip);*/
 
@@ -276,8 +302,7 @@ implementation {
   // that terminates when the gathered data is printed.
   task void trigger_data(){
 
-    /*uint8_t ctrl_reg = 0;*/
-    /*uint8_t ctrl_prefix = 0x04;*/
+    uint8_t ctrl_prefix = 0x00;
     switch(state){
       /*case S_TEMP:*/
       /*  ctrl_reg = ctrl_prefix | LTC2942_ADC_MODE_TEMPERATURE;*/
@@ -285,12 +310,24 @@ implementation {
       /*  call ConvertionTimer.startOneShot(10);*/
       /*  break;*/
       case S_VOLT:
-        /*ctrl_reg = ctrl_prefix | LTC2942_ADC_MODE_VOLTAGE;*/
-        /*reg_write_retry(LTC2942_ADDR, LTC2942_CONTROL_REG, ctrl_reg);*/
-        P7DIR |= 3;
-        P7OUT |= 2;
-        call VoltageRead.read();
+        i2c_data[0] = LTC2942_CONTROL_REG;
+        i2c_data[1] = ctrl_prefix | LTC2942_ADC_MODE_VOLTAGE;
+
+        i2c_error |= call I2CPacket.write(I2C_START | I2C_STOP, LTC2942_ADDR, 2, i2c_data);
+
         break;
+      case S_ADC_VOLT:
+        P7OUT |= 2;
+        /*call VoltageRead.read();*/
+        // No ADC voltage
+        int_voltage_read = TRUE;
+        post gather_data();
+        break;
+      case S_VOLT_I2C_READ:
+        i2c_data[0] = LTC2942_VOLT_MSB_REG;
+        i2c_error |= call I2CPacket.write(I2C_START, LTC2942_ADDR, 1, i2c_data);
+        break;
+
       case S_CURRENT:
         // internal Adc takes about 15 ms while the LTC2942 takes 10. So request both at the same time
         call CurrentRead.read();
@@ -298,55 +335,64 @@ implementation {
       case S_CHARGE:
         // No need to write anything, proceed with reading the data
         /*call ConvertionTimer.startOneShot(5);*/
-        post gather_data();
+
+        i2c_data[0] = LTC2942_ACCUM_CHARGE_MSB_REG;
+        i2c_error |= call I2CPacket.write(I2C_START, LTC2942_ADDR, 1, i2c_data);
         break;
     }
 
   }
 
+  void reset_i2c(){
+    // Reset I2C by setting both pins High for some amount of time
+    call SDA.selectIOFunc();
+    call SCL.selectIOFunc();
+
+    call SDA.makeOutput();
+    call SCL.makeOutput();
+
+    call SCL.set();
+    call Leds.led2On();
+    call BusyWait.wait(400); 
+    call Leds.led2Off();
+    call SDA.set();
+    
+    call Leds.led2On();
+    call Leds.led2Off();
+    call Leds.led2On();
+    call Leds.led2Off();
+    call BusyWait.wait(1000); // 1 ms
+
+    call SDA.selectModuleFunc();
+    call SCL.selectModuleFunc();
+    i2c_error = SUCCESS;
+  }
+
   void reg_read_retry(uint16_t slave_addr, uint8_t reg, uint8_t *val){
 #ifdef USE_LTC2942
-    error_t i2c_err;
-    while(1){
-      i2c_err = call I2CReg.reg_read(slave_addr, reg, val);
-      if(i2c_err != SUCCESS){
-        call Leds.led2On();
-        call Leds.led2Off();
-      }else
-        break;
-    }
+    i2c_error |= call I2CReg.reg_read(slave_addr, reg, val);
 #endif
   }
 
   void reg_read16_retry(uint16_t slave_addr, uint8_t reg, uint16_t *val){
 #ifdef USE_LTC2942
-    error_t i2c_err;
-    while(1){
-      i2c_err = call I2CReg.reg_read16(slave_addr, reg, val);
-      if(i2c_err != SUCCESS){
-        call Leds.led2On();
-        call Leds.led2Off();
-      }else
-        break;
-    }
+    i2c_error |= call I2CReg.reg_read16(slave_addr, reg, val);
 #endif
   }
   void reg_write_retry(uint16_t slave_addr, uint8_t reg, uint8_t val){
 #ifdef USE_LTC2942
-    error_t i2c_err;
-    while(1){
-      i2c_err = call I2CReg.reg_write(slave_addr, reg, val);
-      if(i2c_err != SUCCESS){
-        call Leds.led2On();
-        call Leds.led2Off();
-      }else
-        break;
-    }
+    i2c_error |= call I2CReg.reg_write(slave_addr, reg, val);
 #endif
   }
 
   event void ConvertionTimer.fired(){
-    post gather_data();
+    // This is the only way I could think of doing this. When the timer fires, the ADC_Volt may or may not be ready. We
+    // change state here so that we can issue the I2C request. In the mean time, if the ADC_Volt becomes ready,
+    // gather_data should handle it properly.
+    if(state == S_ADC_VOLT){
+      state = S_VOLT_I2C_READ;
+      post trigger_data();
+    }
   }
 
   event void CurrentRead.readDone(error_t result, uint16_t data){
@@ -358,36 +404,18 @@ implementation {
   }
 
   event void VoltageRead.readDone(error_t result, uint16_t data){
+    int_voltage_read = TRUE;
     voltage_adc = data;
+    P7OUT &= ~2;
     // Fire timer so data can be sent
     post gather_data();
   }
 
 
   task void gather_data(){
-    uint8_t write_reg = 0;
     uint32_t cur_time = 0;
 
-    P7DIR |= 3;
     P7OUT |= 1;
-
-    switch(state){
-      /*case S_TEMP:*/
-      /*  write_reg = LTC2942_TEMP_MSB_REG;*/
-      /*  break;*/
-      /*case S_VOLT:*/
-      /*  write_reg = LTC2942_VOLT_MSB_REG;*/
-      /*  break;*/
-      case S_CHARGE:
-        i2c_charge_ctr = (i2c_charge_ctr + 1) % 20;
-        if(i2c_charge_ctr == 0){
-          write_reg = LTC2942_ACCUM_CHARGE_MSB_REG;
-          reg_read16_retry(LTC2942_ADDR, write_reg, &buffer);
-        }else {
-          buffer = 0;
-        }
-        break;
-    }
 
     /*
      *As the ADC resolution of the Coulomb counter is 14-bit in voltage mode and 10-bit
@@ -396,41 +424,107 @@ implementation {
      *combined temperature registers (M, N) are always zero.
      */
 
-    // State changes only happen here
-    switch(state){
-      /*case S_TEMP:*/
-      /*  state = S_VOLT;*/
-      /*  temperature = buffer;*/
-      /*  post trigger_data();*/
-      /*  break;*/
-      case S_VOLT:
-        voltage_ready = TRUE;
-        state = S_CURRENT;
-        post trigger_data();
-        break;
-      case S_CURRENT:
-        state = S_CHARGE;
-        post trigger_data();
-        break;
-      default:
-        charge = buffer;
-        state = start_state;
-        // Print out
-        cur_time = call LocalTime.get();
-        /*printf("%lu %u %u %u %u\n", (unsigned long int)cur_time, temperature, charge, voltage, current_adc);*/
-        /*printf("%lu %u %u %u %u %u %u\n", (unsigned long int)cur_time, temperature, charge, voltage, current_adc, current_ctrl_dir, current_ctrl_val);*/
-        if(!depletion_alert)
-          printf("%lu %u %u %u %u\n", (unsigned long int)cur_time, charge, voltage_adc, current_adc, pwm_val);
-        /*printf("%u %u %u\n", temperature, charge, voltage);*/
-        break;
+    if(i2c_error == SUCCESS){
+
+      // State changes only happen here
+      switch(state){
+        /*case S_TEMP:*/
+        /*  state = S_VOLT;*/
+        /*  temperature = buffer;*/
+        /*  post trigger_data();*/
+        /*  break;*/
+        case S_VOLT:
+          voltage_ready = TRUE;
+          state = S_ADC_VOLT;
+          call ConvertionTimer.startOneShot(LTC2942_ADC_CONVERTION_TIME_MS);
+          post trigger_data();
+          break;
+        case S_ADC_VOLT:
+        case S_VOLT_I2C_READ:
+          // Only change state after both voltages have been read.
+          if(i2c_voltage_read && int_voltage_read){
+            i2c_voltage_read = FALSE;
+            int_voltage_read = FALSE;
+
+            // Do stats
+            // Running mean and variance calculation
+            // u = (7*u + x)/8
+            // var = (7*var + (x-u)^2)/8
+            // We use shift instead of division
+            current_mean = ((current_mean << current_shift) - current_mean + current_adc) >> current_shift;
+            current_var = ((current_var << current_shift) - current_var + (current_adc - current_mean)*(current_adc - current_mean)) >> current_shift;
+
+            state = S_CURRENT;
+            post trigger_data();
+          }
+          break;
+        case S_CURRENT:
+          state = S_CHARGE;
+          post trigger_data();
+          break;
+        default:
+          state = start_state;
+          // Print out
+          cur_time = call LocalTime.get();
+
+          if(!depletion_alert){
+            printf("%lu %u %u %u %u\n", (unsigned long int)cur_time, charge, voltage_i2c, current_adc, pwm_val);
+            /*printf("%lu %u %u %u %u %lu %lu\n", (unsigned long int)cur_time, charge, voltage_i2c, current_adc, pwm_val, current_mean, current_var);*/
+          }
+          break;
+      }
+    }else{
+      // start over
+      /*reset_i2c();*/
+      P7OUT |= 4;
+      state= start_state;
+      call PeriodTimer.stop();
+      // Release and request I2C bus so as to reset and restart the communication
+      call Resource.release();
+      call Resource.request();
+      P7OUT &= ~4;
     }
     P7OUT &= ~(1);
   }
 
-  async event void I2CPacket.readDone(error_t error, uint16_t addr, uint8_t length, uint8_t* data){}
+  async event void I2CPacket.readDone(error_t error, uint16_t addr, uint8_t length, uint8_t* data){
+    i2c_error |= error;
+
+    if(error == SUCCESS){
+      switch(state){
+        case S_VOLT_I2C_READ:
+          i2c_voltage_read = TRUE;
+          voltage_i2c = data[0] << 8 | data[1];
+          break;
+        case S_CHARGE:
+          charge = data[0] << 8 | data[1];
+          break;
+      }
+
+    }
+    post gather_data();
+  }
 
   async event void I2CPacket.writeDone(error_t error, uint16_t addr, uint8_t length, uint8_t* data){
+    i2c_error |= error;
+    if(error == SUCCESS){
+      switch(state){
+        case S_VOLT:
+          post gather_data();
+          break;
+        case S_VOLT_I2C_READ:
+          i2c_error |=call I2CPacket.read(I2C_RESTART | I2C_STOP, LTC2942_ADDR, 2, (uint8_t *)&buffer);
+          break;
+        case S_CHARGE:
+          charge = 0;
+          i2c_error |= call I2CPacket.read(I2C_RESTART | I2C_STOP, LTC2942_ADDR, 2, (uint8_t *)&buffer);
+          break;
+      }
+    }
 
+    if(i2c_error != SUCCESS){
+      post gather_data(); // Handles errors;
+    }
   }
 
   event void Button1.notify(bool val){
