@@ -17,6 +17,7 @@
 #define LTC2942_ADC_MODE_VOLTAGE (0x2 << 6)
 #define LTC2942_ADC_MODE_TEMPERATURE (0x1 << 6)
 
+#define LTC2942_ADC_CONVERTION_TIME_MS 15
 
 #endif /* end of include guard: LTC2942_H_A6WOD2CT */
 

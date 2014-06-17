@@ -210,6 +210,7 @@ implementation {
 
   event void Resource.granted(){
     uint8_t status = 0;
+    uint8_t i;
 
 
     i2c_error = SUCCESS;
@@ -225,6 +226,10 @@ implementation {
         first_boot = FALSE;
       }
       printf("I2C Status %x\n", status);
+      printf("I2C Registers:\n");
+      for(i=0; i < 16; i++) printf("%#02x ", buffer16[i]);
+      printf("\n");
+      
     }
     call PeriodTimer.startPeriodic(50);
     /*call PeriodTimer.startPeriodic(100);*/
@@ -292,7 +297,8 @@ implementation {
 
     /*current_ctrl_period = (current_ctrl_period+1)%10;*/
     /*current_ctrl_period = (current_ctrl_period+1)%2;*/
-    current_ctrl_period = (current_ctrl_period+1)%5;
+    /*current_ctrl_period = (current_ctrl_period+1)%5;*/
+    current_ctrl_period = 0;
 
     if(!depletion_alert)
       post trigger_data();
