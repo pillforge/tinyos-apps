@@ -31,8 +31,8 @@ implementation {
   InclinometerC.AccelRead -> Accel;
   InclinometerDemoC.AccelRead -> Accel;
 
-  /*components new Msp430UsciSpiA0C() as Spi;*/
-  components new Msp430UsciSpiB1C() as Spi;
+  components new Msp430UsciSpiA0C() as Spi;
+  /*components new Msp430UsciSpiB1C() as Spi;*/
   components HplMsp430GeneralIOC as GPIO;
   components HplMsp430InterruptC as GPIO_Int;
 
