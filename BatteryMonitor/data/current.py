@@ -2,17 +2,18 @@ from pylab import *
 
 prescaler = 1.0
 
-def calc_current_formula(t_ms, mah_raw):
+def calc_current_formula(t_s, mah_raw):
     """Calculate current based on accumulated charge
 
-    :t_ms: Timestamps in milliseconds
+    :t_s: Timestamps in seconds
     :mah_raw: raw mAh readings
     :returns: mA
 
     Rsense = 100mOhms
 
     """
-    return -mah_raw*0.085*3600*prescaler/(2*128*t_ms)
+    rsense = 150.0
+    return -mah_raw*0.085*3600*prescaler*50/(rsense*128*t_s)
 
 def calc_current(x):
     """@todo: Docstring for calc_current.
