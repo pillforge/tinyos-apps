@@ -1,0 +1,5 @@
+COMPONENT=RadioTXBlinkAppC
+#CFLAGS+=-DPACKET_LINK
+
+include $(MAKERULES)
+
