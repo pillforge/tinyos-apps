@@ -1,0 +1,2 @@
+COMPONENT=MotorTestAppC
+include $(MAKERULES)
