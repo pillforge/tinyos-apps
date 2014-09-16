@@ -1,12 +1,12 @@
 configuration MotorTestAppC{
 }
 implementation {
-  components MotorTestC, MainC, ActuatorC, new TimerMilliC();
+  components MotorTestC, MainC, new TimerMilliC();
+  components MotorDriverC as Motors;
   components HplMsp430GeneralIOC as GPIO;
 
   MotorTestC -> MainC.Boot;
-  MotorTestC -> ActuatorC.Actuate;
+  MotorTestC.M0 -> Motors.Actuate[0];
+  MotorTestC.M1 -> Motors.Actuate[2];
   MotorTestC.Timer -> TimerMilliC;
-  ActuatorC.OutPin1 -> GPIO.Port12;
-  ActuatorC.OutPin2 -> GPIO.Port14;
 }

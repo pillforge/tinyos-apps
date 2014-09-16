@@ -1,7 +1,8 @@
 module MotorTestC {
   uses {
     interface Boot;
-    interface Actuate<uint8_t>;
+    interface Actuate<uint8_t> as M0;
+    interface Actuate<uint8_t> as M1;
     interface Timer<TMilli>;
   }
 
@@ -17,27 +18,28 @@ implementation {
 
   int state = STATE_STOP;
   event void Boot.booted(){
-    /*call Actuate.write(50,FALSE);*/
-    call Timer.startPeriodic(2000);
+    /*call Actuate.write(50);*/
+    call Timer.startPeriodic(1000);
   }
 
   event void Timer.fired(){
     switch(state){
       case STATE_STOP:
         state = STATE_FWD;
-        call Actuate.write(0,TRUE);
+        call M0.write(0);
+        call M1.write(0);
         break;
       case STATE_FWD:
         state = STATE_FWD_STOP;
-        call Actuate.write(50,TRUE);
+        call M0.write(50);
         break;
       case STATE_FWD_STOP:
         state = STATE_REV;
-        call Actuate.write(0,TRUE);
+        call M0.write(0);
         break;
       case STATE_REV:
         state = STATE_STOP;
-        call Actuate.write(50,FALSE);
+        call M1.write(50);
         break;
     }
   }

@@ -1,15 +1,13 @@
 configuration ActuatorC {
   provides interface Actuate<uint8_t>;
   uses {
-    interface HplMsp430GeneralIO as OutPin1;
-    interface HplMsp430GeneralIO as OutPin2;
+    interface HplMsp430GeneralIO as OutPin;
   }
 }
 implementation {
 
   components ActuatorP;
   components Msp430TimerC, MainC;
-  /*components HplMsp430GeneralIOC as GPIO;*/
 
   ActuatorP.Init <- MainC.SoftwareInit;
   ActuatorP.TimerCompare0 -> Msp430TimerC.Compare0_A0;
