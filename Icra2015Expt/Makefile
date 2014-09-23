@@ -1,0 +1,2 @@
+COMPONENT=Icra2015ExptAppC
+include $(MAKERULES)
