@@ -13,9 +13,10 @@ implementation {
   components Icra2015ExptC as App, MainC;
   components new AMSenderC(AM_RADIOEXPTDATAMSG);
   components new AMReceiverC(AM_RADIOEXPTCOMMANDMSG);
-  components new TimerMilliC();
+  components new TimerMilliC() as Timer1;
+  components new TimerMilliC() as Timer2;
   components ActiveMessageC;
-  components SerialPrintfC;
+  /*components SerialPrintfC;*/
 
   App.Boot -> MainC.Boot;
   App.Receive -> AMReceiverC;
@@ -23,10 +24,24 @@ implementation {
   App.RadioControl -> ActiveMessageC;
   App.Packet -> ActiveMessageC;
   App.Acks -> AMSenderC;
-  App.Timer -> TimerMilliC;
+  App.LowPowerListening -> ActiveMessageC;
+
+  App.Timer -> Timer1;
+  App.MotorTimer -> Timer2;
 
   components Lsm330dlcC;
   App.AccelRead -> Lsm330dlcC.AccelRead;
   App.GyroRead -> Lsm330dlcC.GyroRead;
 
+  components new MotorDriverGenericC(0) as M0;
+  App.M0 -> M0;
+
+  // This probably belongs somewhere else. It is used to initialize all pwm pins as output low.
+  components MotorMapC;
+  App.PwmPin -> MotorMapC.HplMsp430GeneralIO[0];
+  App.PwmPin -> MotorMapC.HplMsp430GeneralIO[1];
+  App.PwmPin -> MotorMapC.HplMsp430GeneralIO[2];
+  App.PwmPin -> MotorMapC.HplMsp430GeneralIO[3];
+  /*components MotorDriverC as Motors;*/
+  /*App.M0 -> Motors.Actuate[0];*/
 }

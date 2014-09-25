@@ -38,8 +38,8 @@ implementation {
   Actuate[2] = A2;
   Actuate[3] = A3;
   MotorDriverP.SubInit -> A0;
-  MotorDriverP.SubInit -> A1;
-  MotorDriverP.SubInit -> A2;
-  MotorDriverP.SubInit -> A3;
+  /*MotorDriverP.SubInit -> A1;*/
+  /*MotorDriverP.SubInit -> A2;*/
+  /*MotorDriverP.SubInit -> A3;*/
 
 }

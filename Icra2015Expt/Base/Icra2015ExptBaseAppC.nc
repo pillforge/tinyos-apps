@@ -16,6 +16,7 @@ implementation {
   components new TimerMilliC();
   components ActiveMessageC;
   components SerialPrintfC;
+  components HplMsp430GeneralIOC as GPIO;
 
   App.Boot -> MainC.Boot;
   App.Receive -> AMReceiverC;
@@ -24,4 +25,5 @@ implementation {
   App.Packet -> ActiveMessageC;
   App.Acks -> AMSenderC;
   App.Timer -> TimerMilliC;
+  App.ScopeTrigger -> GPIO.Port40;
 }

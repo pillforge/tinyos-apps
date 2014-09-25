@@ -104,9 +104,9 @@ implementation {
     // Read 6 bytes from accelerometer
     // This can be made more efficient by using the autoincrement
     call AccelCS.clr();
-    accel.x = (readRegister(ACC_REG_OUT_X_H) << 8) + readRegister(ACC_REG_OUT_X_L);
-    accel.y = (readRegister(ACC_REG_OUT_Y_H) << 8) + readRegister(ACC_REG_OUT_Y_L);
-    accel.z = (readRegister(ACC_REG_OUT_Z_H) << 8) + readRegister(ACC_REG_OUT_Z_L);
+    accel.x = (int16_t)(((uint16_t) (readRegister(ACC_REG_OUT_X_H) << 8)) + readRegister(ACC_REG_OUT_X_L));
+    accel.y = (int16_t)(((uint16_t) (readRegister(ACC_REG_OUT_Y_H) << 8)) + readRegister(ACC_REG_OUT_Y_L));
+    accel.z = (int16_t)(((uint16_t) (readRegister(ACC_REG_OUT_Z_H) << 8)) + readRegister(ACC_REG_OUT_Z_L));
     call AccelCS.set();
     signal AccelRead.readDone(SUCCESS, accel);
   }
@@ -114,7 +114,7 @@ implementation {
   task void ReadGyroValues(){
     // Read 6 bytes from accelerometer
     call GyroCS.clr();
-    gyro.x = (readRegister(GYR_REG_OUT_X_L) << 8) + readRegister(GYR_REG_OUT_X_L);
+    gyro.x = (readRegister(GYR_REG_OUT_X_H) << 8) + readRegister(GYR_REG_OUT_X_L);
     gyro.y = (readRegister(GYR_REG_OUT_Y_H) << 8) + readRegister(GYR_REG_OUT_Y_L);
     gyro.z = (readRegister(GYR_REG_OUT_Z_H) << 8) + readRegister(GYR_REG_OUT_Z_L);
     call GyroCS.set();

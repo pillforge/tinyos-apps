@@ -1,3 +1,4 @@
 COMPONENT=Icra2015ExptAppC
-CFLAGS+=-I../include/
+CFLAGS+=-I../include/ -IMotorTest
+CFLAGS+=-DLOW_POWER_LISTENING
 include $(MAKERULES)
