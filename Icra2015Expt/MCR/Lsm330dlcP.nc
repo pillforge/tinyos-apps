@@ -80,9 +80,9 @@ implementation {
       call AccelCS.set();
       // Configure Gyro 
 
-      call GyroCS.clr();
-      writeRegister(CTRL_REG1_G, DRBW_1000 | LPen_G | xyz_en_G);
-      call GyroCS.set();
+      /*call GyroCS.clr();*/
+      /*writeRegister(CTRL_REG1_G, DRBW_1000 | LPen_G | xyz_en_G);*/
+      /*call GyroCS.set();*/
 
     } else {
       // Try again

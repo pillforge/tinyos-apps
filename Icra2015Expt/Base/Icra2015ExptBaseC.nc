@@ -36,9 +36,9 @@ implementation {
   task void sendTask() {
     RadioExptCommandMsg* rcm = (RadioExptCommandMsg*)call Packet.getPayload(&packet, sizeof(RadioExptCommandMsg));
     rcm->cmd = 1;
-    rcm->motor_duty_cycle = 100; // 50 %
-    rcm->motor_on_time = 50; // 500 ms
-    rcm->sample_rate = 2000; // 2 s
+    rcm->motor_duty_cycle = 50; // percent
+    rcm->motor_on_time = 60; // in ms
+    rcm->sample_rate = 2000; // in s
     /*rcm->cmd = 2;*/
     /*call PacketLink.setRetries(&packet, 10);*/
     call AMSend.send(to_send_addr, &packet, sizeof(RadioExptDataMsg));
