@@ -15,7 +15,9 @@ implementation {
   components new AMReceiverC(AM_RADIOEXPTCOMMANDMSG);
   components new TimerMilliC() as Timer1;
   components new TimerMilliC() as Timer2;
+  components new TimerMilliC() as Timer3;
   components ActiveMessageC;
+  /*components NoSleepC;*/
   /*components SerialPrintfC;*/
 
   App.Boot -> MainC.Boot;
@@ -24,7 +26,7 @@ implementation {
   App.RadioControl -> ActiveMessageC;
   App.Packet -> ActiveMessageC;
   App.Acks -> AMSenderC;
-  App.LowPowerListening -> ActiveMessageC;
+  /*App.LowPowerListening -> ActiveMessageC;*/
 
   App.Timer -> Timer1;
   App.MotorTimer -> Timer2;
@@ -42,6 +44,4 @@ implementation {
   App.PwmPin -> MotorMapC.HplMsp430GeneralIO[1];
   App.PwmPin -> MotorMapC.HplMsp430GeneralIO[2];
   App.PwmPin -> MotorMapC.HplMsp430GeneralIO[3];
-  /*components MotorDriverC as Motors;*/
-  /*App.M0 -> Motors.Actuate[0];*/
 }

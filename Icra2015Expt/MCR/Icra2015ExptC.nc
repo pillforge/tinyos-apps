@@ -16,7 +16,7 @@ module Icra2015ExptC {
     interface PacketAcknowledgements as Acks;
     interface SplitControl as RadioControl;
     interface Actuate<uint8_t> as M0;
-    interface LowPowerListening;
+    /*interface LowPowerListening;*/
     interface HplMsp430GeneralIO as PwmPin;
   }
 
@@ -27,7 +27,7 @@ implementation {
   message_t packet;
   Accel_t data;
   RadioExptCommandMsg last_cmd;
-  uint8_t to_send_addr = 2;
+  uint8_t to_send_addr = 1;
 
   event void Boot.booted(){
     last_cmd.sample_rate = 2000;
@@ -35,7 +35,7 @@ implementation {
     last_cmd.motor_on_time = 100;
     call PwmPin.makeOutput();
     call PwmPin.clr();
-    call LowPowerListening.setLocalWakeupInterval(250);
+    /*call LowPowerListening.setLocalWakeupInterval(250);*/
     call Timer.startPeriodic(last_cmd.sample_rate);
   }
 
@@ -48,12 +48,14 @@ implementation {
   task void sendTask() {
     RadioExptDataMsg* rcm = (RadioExptDataMsg*)call Packet.getPayload(&packet, sizeof(RadioExptDataMsg));
     rcm->sensor_data = data;
-    /*call PacketLink.setRetries(&packet, 10);*/
     call AMSend.send(to_send_addr, &packet, sizeof(RadioExptDataMsg));
   }
 
   event void RadioControl.startDone(error_t err){
-    post sendTask();
+    if(err == SUCCESS)
+      post sendTask();
+    else
+      call RadioControl.start();
   }
 
   event void MotorTimer.fired(){
@@ -82,8 +84,11 @@ implementation {
 
   event void AccelRead.readDone(error_t err, Accel_t val){
     /*printf("X: %d, Y: %d, Z: %d\n", val.x, val.y, val.z);*/
+    error_t rc;
     data = val;
-    call RadioControl.start();
+    rc = call RadioControl.start();
+    if (rc == EALREADY) // Radio is already started
+      post sendTask();
   }
   event void GyroRead.readDone(error_t err, Gyro_t val){
     /*printf("X: %d, Y: %d, Z: %d\n", val.x, val.y, val.z);*/

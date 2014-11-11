@@ -1,6 +1,6 @@
 #include "Icra2015Expt.h"
-#define NEW_PRINTF_SEMANTICS
-#include "printf.h"
+/*#define NEW_PRINTF_SEMANTICS*/
+/*#include "printf.h"*/
 
 module Icra2015ExptBaseC {
   uses {
@@ -20,7 +20,7 @@ implementation {
 
   message_t packet;
   Accel_t data;
-  uint8_t to_send_addr = 1;
+  uint8_t to_send_addr = 2;
 
   event void Boot.booted(){
     call ScopeTrigger.makeOutput();
@@ -35,9 +35,11 @@ implementation {
 
   task void sendTask() {
     RadioExptCommandMsg* rcm = (RadioExptCommandMsg*)call Packet.getPayload(&packet, sizeof(RadioExptCommandMsg));
+    call ScopeTrigger.clr();
+    call ScopeTrigger.set();
     rcm->cmd = 1;
     rcm->motor_duty_cycle = 50; // percent
-    rcm->motor_on_time = 60; // in ms
+    rcm->motor_on_time = 500; // in ms
     rcm->sample_rate = 2000; // in s
     /*rcm->cmd = 2;*/
     /*call PacketLink.setRetries(&packet, 10);*/
@@ -49,7 +51,7 @@ implementation {
   event void RadioControl.stopDone(error_t err){}
 
   event message_t* Receive.receive(message_t* bufPtr, void* payload, uint8_t len) {
-    RadioExptDataMsg* val = (RadioExptDataMsg*) payload;
+    /*RadioExptDataMsg* val = (RadioExptDataMsg*) payload;*/
     call ScopeTrigger.set();
     /*printf("Received: X: %d, Y: %d, Z: %d\n", val->sensor_data.x, val->sensor_data.y, val->sensor_data.z);*/
 
