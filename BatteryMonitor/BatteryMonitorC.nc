@@ -6,8 +6,8 @@
 #define MSP430_I2C_MASTER_MODE UCMST // single-master mode
 #define MSP430_I2C_DIVISOR 80 // 100khz
 
-#define USE_CONSTANT_CURRENT
-#define CHECK_BATTERY_DEPLETION
+/*#define USE_CONSTANT_CURRENT*/
+/*#define CHECK_BATTERY_DEPLETION*/
 #define USE_LTC2942
 
 module BatteryMonitorC {
@@ -70,6 +70,7 @@ implementation {
     PWM_CLK_SRC_ACLK = 1,
     PWM_CLK_SRC_SMCLK= 2,
     TIMER_UP_MODE = 1,
+    BATTERY_READ_PERIOD = 250
   };
 
 
@@ -231,7 +232,7 @@ implementation {
       printf("\n");
       
     }
-    call PeriodTimer.startPeriodic(50);
+    call PeriodTimer.startPeriodic(BATTERY_READ_PERIOD);
     /*call PeriodTimer.startPeriodic(100);*/
     /*call PseudoWdt.startPeriodic(100);*/
   }
@@ -474,7 +475,8 @@ implementation {
           cur_time = call LocalTime.get();
 
           if(!depletion_alert){
-            printf("%lu %u %u %u %u\n", (unsigned long int)cur_time, charge, voltage_i2c, current_adc, pwm_val);
+            /*printf("%lu %u %u %u %u\n", (unsigned long int)cur_time, charge, voltage_i2c, current_adc, pwm_val);*/
+            printf("%lu %u %u %u %u\n", (unsigned long int)cur_time, charge, voltage_i2c, 0,0);
             /*printf("%lu %u %u %u %u %lu %lu\n", (unsigned long int)cur_time, charge, voltage_i2c, current_adc, pwm_val, current_mean, current_var);*/
           }
           break;
