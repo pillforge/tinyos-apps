@@ -1,3 +1,5 @@
+#include "SenseAndSend.h"
+
 module SendC {
   uses {
     interface Boot;
