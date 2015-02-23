@@ -1,15 +1,18 @@
+#define sensor_read_t Accel_t
+#define sample_rate_value 100
+
 #include "SenseAndSend.h"
 
 module SenseC {
   uses interface Boot;
   uses interface Timer<TMilli>;  
-  uses interface Read<Accel_t> as AccelRead;
-  provides interface Message;
+  uses interface Read<sensor_read_t> as AccelRead;
+  provides interface Message<sensor_read_t>;
 }
 
 implementation {
 
-  uint8_t sample_rate = 100;
+  uint8_t sample_rate = sample_rate_value;
 
   event void Boot.booted() {
     call Timer.startPeriodic(sample_rate);
@@ -17,7 +20,7 @@ implementation {
   event void Timer.fired() {
     call AccelRead.read();
   }
-  event void AccelRead.readDone(error_t err, Accel_t val) {
+  event void AccelRead.readDone(error_t err, sensor_read_t val) {
     signal Message.newMessage(val);    
   }
 

@@ -3,7 +3,7 @@ module SendC {
     interface Boot;
     interface SplitControl as RadioControl;
     interface AMSend;
-    interface Message;
+    interface Message<Accel_t>;
     interface Packet;
   }
 }

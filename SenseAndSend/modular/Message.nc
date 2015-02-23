@@ -1,3 +1,3 @@
-interface Message {
-  event void newMessage(Accel_t msg);
+interface Message<msg_t> {
+  event void newMessage(msg_t msg);
 }
