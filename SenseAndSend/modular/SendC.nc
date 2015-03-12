@@ -1,9 +1,11 @@
+#include "Send.h"
+
 module SendC {
   uses {
     interface Boot;
     interface SplitControl as RadioControl;
     interface AMSend;
-    interface Message<Accel_t>;
+    interface Message<send_t>;
     interface Packet;
   }
 }
@@ -11,15 +13,15 @@ module SendC {
 implementation {
 
   message_t packet;
-  uint8_t to_send_addr = 1;
-  Accel_t data;
+  uint8_t to_send_addr = to_send_addr_value;
+  send_t data;
 
   task void sendTask();
 
   task void sendTask() {
-    SensorDataMsg* rcm = (SensorDataMsg*) call Packet.getPayload(&packet, sizeof(SensorDataMsg));
+    SendDataMsg* rcm = (SendDataMsg*) call Packet.getPayload(&packet, sizeof(SendDataMsg));
     rcm->sensor_data = data;
-    call AMSend.send(to_send_addr, &packet, sizeof(SensorDataMsg));
+    call AMSend.send(to_send_addr, &packet, sizeof(SendDataMsg));
   }
 
   event void Boot.booted() {
@@ -31,7 +33,7 @@ implementation {
       call RadioControl.start();
   }
 
-  event void Message.newMessage(Accel_t n_data) {
+  event void Message.newMessage(send_t n_data) {
     data = n_data;
     post sendTask();
   }

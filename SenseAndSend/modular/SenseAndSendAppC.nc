@@ -1,4 +1,5 @@
-#include "SenseAndSend.h"
+#include "Sense.h"
+#include "Send.h"
 
 configuration SenseAndSendAppC {
   
@@ -17,7 +18,7 @@ implementation {
 
   components SendC;
   components ActiveMessageC;
-  components new AMSenderC(AM_SENSORDATAMSG);
+  components new AMSenderC(AM_SENDDATAMSG);
 
   SendC.Boot -> MainC;
   SendC.RadioControl -> ActiveMessageC;

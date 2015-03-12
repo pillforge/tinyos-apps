@@ -1,5 +1,4 @@
-#include "SenseAndSend.h"
-
+#include "Sense.h"
 configuration SenseAppC {
   
 }

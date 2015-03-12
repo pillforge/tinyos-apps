@@ -5,6 +5,8 @@
  */
 
 #include "Lsm330dlc.h"
+#include "Sense.h"
+
 configuration Lsm330dlcC {
   provides{
     interface Read<Accel_t> as AccelRead;

@@ -1,7 +1,6 @@
 #define sensor_read_t Accel_t
-#define sample_rate_value 100
 
-#include "SenseAndSend.h"
+#include "Sense.h"
 
 module SenseC {
   uses interface Boot;
