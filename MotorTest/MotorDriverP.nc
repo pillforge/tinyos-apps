@@ -19,8 +19,9 @@ implementation {
 
     call MspTimer.setMode(TIMER_UP_MODE);
     call MspTimer.setClockSource(PWM_CLK_SRC_SMCLK);
+    call MspTimer.disableEvents();
 
-    /*// Initialize all actuators*/
+    // Initialize all actuators
     call SubInit.init();
 
     call MspTimer.setMode(1); // Starts timer
