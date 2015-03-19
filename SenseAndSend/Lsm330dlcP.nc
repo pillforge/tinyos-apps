@@ -3,6 +3,8 @@
  */
 
 #include "Lsm330dlc.h"
+#define NEW_PRINTF_SEMANTICS
+#include "printf.h"
 
 module Lsm330dlcP {
   uses {
