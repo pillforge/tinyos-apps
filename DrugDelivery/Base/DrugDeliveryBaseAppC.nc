@@ -13,10 +13,10 @@ implementation {
   components DrugDeliveryBaseC as App, MainC;
   components new AMSenderC(AM_RADIOCOMMANDMSG);
   components new AMReceiverC(AM_RADIODATAMSG);
-  components new TimerMilliC();
   components ActiveMessageC;
   components SerialPrintfC;
   components HplMsp430GeneralIOC as GPIO;
+  components PlatformSerialC as UartC;
 
   App.Boot -> MainC.Boot;
   App.Receive -> AMReceiverC;
@@ -24,6 +24,6 @@ implementation {
   App.RadioControl -> ActiveMessageC;
   App.Packet -> ActiveMessageC;
   App.Acks -> AMSenderC;
-  App.Timer -> TimerMilliC;
   App.ScopeTrigger -> GPIO.Port40;
+  App.UartStream -> UartC;
 }
