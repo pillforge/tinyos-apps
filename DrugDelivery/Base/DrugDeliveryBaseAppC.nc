@@ -15,7 +15,6 @@ implementation {
   components new AMReceiverC(AM_RADIODATAMSG);
   components ActiveMessageC;
   components SerialPrintfC;
-  components HplMsp430GeneralIOC as GPIO;
   components PlatformSerialC as UartC;
 
   App.Boot -> MainC.Boot;
@@ -24,6 +23,5 @@ implementation {
   App.RadioControl -> ActiveMessageC;
   App.Packet -> ActiveMessageC;
   App.Acks -> AMSenderC;
-  App.ScopeTrigger -> GPIO.Port40;
   App.UartStream -> UartC;
 }

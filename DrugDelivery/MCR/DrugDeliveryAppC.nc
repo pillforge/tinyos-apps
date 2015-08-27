@@ -16,7 +16,6 @@ implementation {
   components new TimerMilliC() as Timer1;
   components new TimerMilliC() as Timer2;
   components ActiveMessageC;
-  components HplMsp430GeneralIOC as GPIO;
   components SerialPrintfC;
 
   App.Boot -> MainC.Boot;
@@ -25,14 +24,10 @@ implementation {
   App.RadioControl -> ActiveMessageC;
   App.Packet -> ActiveMessageC;
   App.Acks -> AMSenderC;
-  /*App.LowPowerListening -> ActiveMessageC;*/
 
   App.Timer -> Timer1;
   App.MotorTimer -> Timer2;
 
   components new MotorDriverGenericC(0) as M0;
   App.M0 -> M0;
-
-  // Pin for powering up the boost regulator
-  App.Boost_EN -> GPIO.Port40;
 }

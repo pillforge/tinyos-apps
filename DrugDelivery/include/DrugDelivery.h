@@ -1,15 +1,6 @@
 #ifndef DRUGDELIVERY_H_SWYI860V
 #define DRUGDELIVERY_H_SWYI860V
 
-typedef nx_struct Accel_t {
-  nx_int16_t x;
-  nx_int16_t y;
-  nx_int16_t z;
-} Accel_t;
-
-typedef Accel_t Gyro_t;
-
-
 typedef nx_struct RadioCommandMsg{
   nx_uint8_t cmd;
   nx_uint16_t sample_rate;
@@ -27,4 +18,3 @@ enum {
 };
 
 #endif /* end of include guard: DRUGDELIVERY_H_SWYI860V */
-
