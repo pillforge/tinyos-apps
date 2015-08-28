@@ -14,6 +14,7 @@ module DrugDeliveryC {
     interface PacketAcknowledgements as Acks;
     interface SplitControl as RadioControl;
     interface Actuate<uint8_t> as M0;
+    interface DrugSchedulerI;
   }
 }
 implementation {
@@ -24,15 +25,19 @@ implementation {
   task void sendTask();
 
   event void Boot.booted() {
+    printf("MCR booted\n");
     call M0.write(20);
     call RadioControl.start();
-    call Timer.startPeriodic(1000);
-    printf("MCR Booted\n");
   }
 
   event void RadioControl.startDone(error_t err) {
-    if(err != SUCCESS)
+    if (err != SUCCESS) {
       call RadioControl.start();
+    } else {
+      printf("MCR Radio started\n");
+      // call DrugSchedulerI.init();
+      call Timer.startPeriodic(1000);
+    }
   }
 
   event void Timer.fired() {
@@ -44,6 +49,10 @@ implementation {
     RadioDataMsg* rdm = (RadioDataMsg*)call Packet.getPayload(&packet, sizeof(RadioDataMsg));
     memcpy(rdm->msg,"Alive",6);
     call AMSend.send(to_send_addr, &packet, sizeof(RadioDataMsg));
+  }
+
+  event void DrugSchedulerI.released () {
+
   }
 
   event message_t* Receive.receive(message_t* bufPtr, void* payload, uint8_t len) {

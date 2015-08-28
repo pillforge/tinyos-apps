@@ -30,4 +30,8 @@ implementation {
 
   components new MotorDriverGenericC(0) as M0;
   App.M0 -> M0;
+
+  components DrugSchedulerC;
+  App.DrugSchedulerI -> DrugSchedulerC;
+
 }
