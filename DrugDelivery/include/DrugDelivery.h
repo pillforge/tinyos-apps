@@ -9,7 +9,7 @@ typedef nx_struct RadioCommandMsg {
 } RadioCommandMsg;
 
 typedef nx_struct RadioDataMsg {
-  nx_uint8_t msg[10];
+  nx_uint8_t remaining_drug;
 } RadioDataMsg;
 
 enum {

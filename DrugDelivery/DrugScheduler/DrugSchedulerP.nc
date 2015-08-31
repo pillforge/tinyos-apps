@@ -6,7 +6,7 @@ module DrugSchedulerP {
   }
 } implementation {
 
-  int remaining_drug = 100; // in percentage
+  uint8_t remaining_drug = 100; // in percentage
   int time_interval;
   int amount;
 
@@ -36,7 +36,7 @@ module DrugSchedulerP {
   event void Timer.fired() {
     if (remaining_drug > 0) {
       remaining_drug -= amount;
-      signal DrugSchedulerI.release();
+      signal DrugSchedulerI.release(amount);
       post handleSchedule();
     } else {
       printf("DrugSchedulerP.Timer.fired: No more remaining drug\n");

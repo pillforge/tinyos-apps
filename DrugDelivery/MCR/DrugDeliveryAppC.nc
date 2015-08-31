@@ -12,14 +12,12 @@ configuration DrugDeliveryAppC {
 implementation {
   components DrugDeliveryC as App, MainC;
   components new AMSenderC(AM_RADIODATAMSG);
-  components new AMReceiverC(AM_RADIOCOMMANDMSG);
   components new TimerMilliC() as Timer1;
   components new TimerMilliC() as Timer2;
   components ActiveMessageC;
   components SerialPrintfC;
 
   App.Boot -> MainC.Boot;
-  App.Receive -> AMReceiverC;
   App.AMSend -> AMSenderC;
   App.RadioControl -> ActiveMessageC;
   App.Packet -> ActiveMessageC;

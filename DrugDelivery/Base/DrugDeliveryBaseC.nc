@@ -21,7 +21,6 @@ implementation {
   char serial_trig_letter = 's';
 
   task void sendSchedule();
-  task void sendTask();
 
   event void Boot.booted() {
     printf("Base booted: DrugDeliveryBaseC\n");
@@ -54,34 +53,21 @@ implementation {
     call AMSend.send(to_send_addr, &packet, sizeof(DrugSchedulerData));
   }
 
-  task void sendTask() {
-    RadioCommandMsg* rcm = (RadioCommandMsg*)call Packet.getPayload(&packet, sizeof(RadioCommandMsg));
-    printf("Sending actuation command...");
-    rcm->cmd = 1;
-    rcm->motor_duty_cycle = 100; // percent
-    rcm->motor_on_time = 100; // in ms
-    rcm->sample_rate = 5000; // in s
-    call AMSend.send(to_send_addr, &packet, sizeof(RadioCommandMsg));
-  }
-
   event void AMSend.sendDone(message_t* bufPtr, error_t error) {
     printf("...Done\n");
     call UartStream.enableReceiveInterrupt();
   }
 
   event message_t* Receive.receive(message_t* bufPtr, void* payload, uint8_t len) {
-    RadioDataMsg* val = (RadioDataMsg*) payload;
-    printf("Received: %s\n", (char *)val->msg);
+    RadioDataMsg *rdm = (RadioDataMsg *) payload;
+    printf("Remaining: %d\n", rdm->remaining_drug);
     return bufPtr;
   }
 
-  event void RadioControl.stopDone(error_t err) {
-  }
+  event void RadioControl.stopDone(error_t err) {}
 
-  async event void UartStream.sendDone(uint8_t*, uint16_t, error_t) {
-  }
+  async event void UartStream.sendDone(uint8_t*, uint16_t, error_t) {}
 
-  async event void UartStream.receiveDone(uint8_t* buf, uint16_t len, error_t error) {
-  }
+  async event void UartStream.receiveDone(uint8_t* buf, uint16_t len, error_t error) {}
 
 }
