@@ -6,12 +6,13 @@
  */
 
 #include "DrugDelivery.h"
+#include "DrugScheduler.h"
 
 configuration DrugDeliveryBaseAppC {
 }
 implementation {
   components DrugDeliveryBaseC as App, MainC;
-  components new AMSenderC(AM_RADIOCOMMANDMSG);
+  components new AMSenderC(AM_RADIODRUGSCHEDULERMSG); // AM_RADIOCOMMANDMSG
   components new AMReceiverC(AM_RADIODATAMSG);
   components ActiveMessageC;
   components SerialPrintfC;

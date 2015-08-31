@@ -20,32 +20,38 @@ implementation {
   uint8_t to_send_addr = 2;
   char serial_trig_letter = 's';
 
+  task void sendSchedule();
   task void sendTask();
 
   event void Boot.booted() {
-    printf("Booted\n");
-    if (call RadioControl.start() == SUCCESS) {
-      printf("Radio starting...\n");
-    } else {
-      printf("Radio couldn't be started\n");
-    }
+    printf("Base booted: DrugDeliveryBaseC\n");
+    call RadioControl.start();
   }
 
   event void RadioControl.startDone(error_t err) {
     if (err == SUCCESS) {
-      printf("Radio started. Send %c to send actuation command\n", serial_trig_letter);
+      printf("Base radio started. Send %c to send actuation command\n", serial_trig_letter);
       call UartStream.enableReceiveInterrupt();
     } else {
-      printf("Radio couldn't be started");
+      call RadioControl.start();
     }
   }
 
   async event void UartStream.receivedByte(uint8_t byte) {
     if (byte == serial_trig_letter) {
       call UartStream.disableReceiveInterrupt();
-      post sendTask();
+      post sendSchedule();
+      // post sendTask();
     } else
       printf("Send %c to send actuation command\n", serial_trig_letter);
+  }
+
+  task void sendSchedule() {
+    DrugSchedulerData *dsd = (DrugSchedulerData *)
+      call Packet.getPayload(&packet, sizeof(DrugSchedulerData));
+    dsd->time_interval = 2; //60 * 60;
+    dsd->amount = 10;
+    call AMSend.send(to_send_addr, &packet, sizeof(DrugSchedulerData));
   }
 
   task void sendTask() {
@@ -59,7 +65,7 @@ implementation {
   }
 
   event void AMSend.sendDone(message_t* bufPtr, error_t error) {
-    printf("Done\n");
+    printf("...Done\n");
     call UartStream.enableReceiveInterrupt();
   }
 

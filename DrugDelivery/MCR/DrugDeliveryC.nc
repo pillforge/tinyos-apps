@@ -25,19 +25,21 @@ implementation {
   task void sendTask();
 
   event void Boot.booted() {
-    printf("MCR booted\n");
-    call M0.write(20);
+    printf("MCR booted: DrugDeliveryC\n");
     call RadioControl.start();
   }
 
   event void RadioControl.startDone(error_t err) {
-    if (err != SUCCESS) {
-      call RadioControl.start();
+    if (err == SUCCESS) {
+      printf("MCR radio started\n");
+      printf("Waiting for the initial scheduling to arrive\n");
     } else {
-      printf("MCR Radio started\n");
-      // call DrugSchedulerI.init();
-      call Timer.startPeriodic(1000);
+      call RadioControl.start();
     }
+  }
+
+  event void DrugSchedulerI.scheduleReceived() {
+    printf("DrugDeliveryC.DrugSchedulerI.scheduleReceived\n");
   }
 
   event void Timer.fired() {
@@ -51,8 +53,8 @@ implementation {
     call AMSend.send(to_send_addr, &packet, sizeof(RadioDataMsg));
   }
 
-  event void DrugSchedulerI.released () {
-
+  event void DrugSchedulerI.release () {
+    printf("DrugDeliveryC.DrugSchedulerI.release\n");
   }
 
   event message_t* Receive.receive(message_t* bufPtr, void* payload, uint8_t len) {
