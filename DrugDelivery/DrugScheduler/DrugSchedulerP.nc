@@ -34,9 +34,10 @@ module DrugSchedulerP {
   }
 
   event void Timer.fired() {
+    uint8_t c_amount = amount > remaining_drug ? remaining_drug : amount;
     if (remaining_drug > 0) {
-      remaining_drug -= amount;
-      signal DrugSchedulerI.release(amount);
+      remaining_drug -= c_amount;
+      signal DrugSchedulerI.release(c_amount);
       post handleSchedule();
     } else {
       printf("DrugSchedulerP.Timer.fired: No more remaining drug\n");

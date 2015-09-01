@@ -61,10 +61,11 @@ implementation {
   event void AMSend.sendDone(message_t* bufPtr, error_t error) {}
 
   event void DrugSchedulerI.release (uint8_t amount) {
+    uint8_t c_amount = amount > remaining_drug ? remaining_drug : amount;
     printf("DrugDeliveryC.DrugSchedulerI.release %d percent\n", amount);
-    remaining_drug -= amount;
+    remaining_drug -= c_amount;
     call M0.write(255); // value to be determined
-    call MotorTimer.startOneShot(amount); // value to be determined
+    call MotorTimer.startOneShot(c_amount); // value to be determined
   }
 
   event void MotorTimer.fired() {

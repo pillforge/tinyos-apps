@@ -49,7 +49,7 @@ implementation {
     DrugSchedulerData *dsd = (DrugSchedulerData *)
       call Packet.getPayload(&packet, sizeof(DrugSchedulerData));
     dsd->time_interval = 2; //60 * 60;
-    dsd->amount = 10;
+    dsd->amount = 15;
     call AMSend.send(to_send_addr, &packet, sizeof(DrugSchedulerData));
   }
 
