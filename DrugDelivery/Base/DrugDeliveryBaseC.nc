@@ -12,6 +12,7 @@ module DrugDeliveryBaseC {
     interface UartStream;
     interface PacketAcknowledgements as Acks;
     interface SplitControl as RadioControl;
+    interface Timer<TMilli>;
   }
 }
 implementation {
@@ -31,9 +32,14 @@ implementation {
     if (err == SUCCESS) {
       printf("Base radio started. Send %c to send actuation command\n", serial_trig_letter);
       call UartStream.enableReceiveInterrupt();
+      call Timer.startPeriodic(1000);
     } else {
       call RadioControl.start();
     }
+  }
+
+  event void Timer.fired() {
+    printf("beat\n");
   }
 
   async event void UartStream.receivedByte(uint8_t byte) {
@@ -42,6 +48,7 @@ implementation {
       post sendSchedule();
       // post sendTask();
     } else
+      printf("Received: %c", byte);
       printf("Send %c to send actuation command\n", serial_trig_letter);
   }
 

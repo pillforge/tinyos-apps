@@ -4,7 +4,7 @@ configuration DrugSchedulerC {
   components DrugSchedulerP;
   DrugSchedulerP = DrugSchedulerI;
 
-  components new AMReceiverC(AM_RADIODRUGSCHEDULERMSG);
+  components new AMReceiverC(AM_DRUGSCHEDULERDATA);
   DrugSchedulerP.Receive -> AMReceiverC;
 
   components new TimerMilliC() as Timer;
