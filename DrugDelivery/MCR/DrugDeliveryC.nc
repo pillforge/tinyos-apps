@@ -14,8 +14,17 @@ module DrugDeliveryC {
     interface SplitControl as RadioControl;
     interface Actuate<uint8_t> as M0;
     interface DrugSchedulerI;
+
+    interface Timer<TMilli> as BeatTimer;
+    interface Leds;
   }
 }
+
+/*
+ *  Led 2 blinks every second
+ *  Led 1 blinks when it receives a message from Base
+ */
+
 implementation {
 
   message_t packet;
@@ -33,13 +42,20 @@ implementation {
     if (err == SUCCESS) {
       printf("MCR radio started\n");
       printf("Waiting for the initial scheduling to arrive\n");
+      call BeatTimer.startPeriodic(1000);
     } else {
       call RadioControl.start();
     }
   }
 
+  event void BeatTimer.fired() {
+    call Leds.led2Toggle();
+    post sendTask();
+  }
+
   event void DrugSchedulerI.scheduleReceived() {
     printf("DrugDeliveryC.DrugSchedulerI.scheduleReceived\n");
+    call Leds.led1Toggle();
     call Timer.stop();
     call Timer.startPeriodic(1000);
   }

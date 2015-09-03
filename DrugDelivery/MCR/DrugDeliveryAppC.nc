@@ -32,4 +32,9 @@ implementation {
   components DrugSchedulerC;
   App.DrugSchedulerI -> DrugSchedulerC;
 
+  components new TimerMilliC() as Timer3;
+  App.BeatTimer -> Timer3;
+  components LedsC;
+  App.Leds -> LedsC;
+
 }

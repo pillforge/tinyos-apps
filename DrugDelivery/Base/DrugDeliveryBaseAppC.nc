@@ -16,15 +16,22 @@ implementation {
   components new AMReceiverC(AM_RADIODATAMSG);
   components ActiveMessageC;
   components SerialPrintfC;
-  components PlatformSerialC as UartC;
 
   App.Boot -> MainC.Boot;
   App.Receive -> AMReceiverC;
   App.AMSend -> AMSenderC;
   App.RadioControl -> ActiveMessageC;
   App.Packet -> ActiveMessageC;
-  App.Acks -> AMSenderC;
-  App.UartStream -> UartC;
+
+  components SerialActiveMessageC as SAM;
+  App.SAMControl -> SAM;
+  App.SAMReceive -> SAM.Receive[AM_DRUGSCHEDULERDATA];
+  App.SAMSend -> SAM.AMSend[AM_DRUGSCHEDULERDATA];
+  App.SAMPacket -> SAM;
+
   components new TimerMilliC() as Timer;
   App.Timer -> Timer;
+  components LedsC;
+  App.Leds -> LedsC;
+
 }

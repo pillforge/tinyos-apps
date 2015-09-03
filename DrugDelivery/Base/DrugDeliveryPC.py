@@ -1,5 +1,6 @@
 # http://wiesel.ece.utah.edu/redmine/projects/hacks/wiki/How_to_use_Python_and_MIG_to_interact_with_a_TinyOS_application
 import sys
+import time
 
 import DrugSchedulerMsg
 from tinyos.message import *
@@ -13,18 +14,25 @@ class DrugDeliveryPC:
     self.tos_source = self.mif.addSource(motestring)
     self.mif.addListener(self, DrugSchedulerMsg.DrugSchedulerMsg)
 
+  counter = 0
   def receive(self, src, msg):
-    print 'receive'
-    print msg.get_amType()
     if msg.get_amType() == DrugSchedulerMsg.AM_TYPE:
-      print msg
+      print 'Received packet #: ', DrugDeliveryPC.counter, 'remaining: ', msg.get_amount(), '%'
+      DrugDeliveryPC.counter += 1
+
+  def send(self):
+    time.sleep(2)
+    payload = DrugSchedulerMsg.DrugSchedulerMsg()
+    payload.set_amount(15)
+    payload.set_time_interval(3)
+    self.mif.sendMsg(self.tos_source, 0xFFFF, payload.get_amType(), 0, payload)
 
 def main():
   if '-h' in sys.argv or len(sys.argv) < 2:
     print 'Usage: ...'
     sys.exit()
   dl = DrugDeliveryPC(sys.argv[1])
-  # dl.send_msg()
+  dl.send()
 
 if __name__ == '__main__':
   try:
