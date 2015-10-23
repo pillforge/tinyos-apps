@@ -34,6 +34,9 @@ implementation {
   message_t packet;
   uint8_t to_send_addr = 2;
   uint8_t status = 255;
+  uint8_t data1 = 99;
+  uint32_t data2 = 99999;
+  uint32_t data3 = 99999;
   uint8_t sending_schedule = 0;
 
   uint8_t size_schedule_data = 0;
@@ -44,8 +47,7 @@ implementation {
   };
 
   task void handleStatus();
-  task void send121();
-  void sendSchedule();
+  task void sendStatus();
 
   event void Boot.booted() {
     printf("Base booted: DrugDeliveryBaseC\n");
@@ -69,7 +71,10 @@ implementation {
     RadioStatusMsg *rsm = (RadioStatusMsg *) payload;
     call Leds.led1Toggle();
     status = rsm->status;
-    printf("Status: %d\n", status);
+    data1 = rsm->data1;
+    data2 = rsm->data2;
+    data3 = rsm->data3;
+    printf("Status: %d, data1: %d\n", status, data1);
     post handleStatus();
     return bufPtr;
   }
@@ -77,13 +82,34 @@ implementation {
   task void handleStatus() {
     switch (status) {
       case 120:
-        sendSchedule();
+        printf("Communication is initiatied\n");
+        if(!sending_schedule) {
+          status = 121;
+          size_schedule_data = sizeof(schedule_data)/sizeof(schedule_data[0]);
+          data1 = size_schedule_data;
+          post sendStatus();
+        }
         break;
       case 122:
         printf("Starting sending the schedule\n");
+        if (size_schedule_data > 0) {
+          status = 123;
+          data1 = 0;
+          data2 = schedule_data[0][0];
+          data3 = schedule_data[0][1];
+          post sendStatus();
+        }
         break;
       case 123:
         printf("Acknowledgment received\n");
+        if (data1 >= size_schedule_data-1) {
+          status = 124;
+        } else {
+          data1++;
+          data2 = schedule_data[data1][0];
+          data3 = schedule_data[data1][1];
+        }
+        post sendStatus();
         break;
       default:
         printf("Undefined status code: %d\n", status);
@@ -91,19 +117,12 @@ implementation {
     }
   }
 
-  void sendSchedule() {
-    if (!sending_schedule) {
-      sending_schedule = 1;
-      printf("Sending 121\n");
-      post send121();
-    }
-  }
-
-  task void send121() {
+  task void sendStatus() {
     RadioStatusMsg *rsm = (RadioStatusMsg *) call Packet.getPayload(&packet, sizeof(RadioStatusMsg));
-    size_schedule_data = sizeof(schedule_data)/sizeof(schedule_data[0]);
-    rsm->status = 121;
-    rsm->data1 = size_schedule_data;
+    rsm->status = status;
+    rsm->data1 = data1;
+    rsm->data2 = data2;
+    rsm->data3 = data3;
     call AMSend.send(to_send_addr, &packet, sizeof(RadioStatusMsg));
   }
 
