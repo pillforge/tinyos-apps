@@ -10,18 +10,29 @@
 configuration DrugDeliveryAppC {
 }
 implementation {
-  components DrugDeliveryC as App, MainC;
-  components new AMSenderC(AM_RADIODATAMSG);
-  components new TimerMilliC() as Timer1;
-  components new TimerMilliC() as Timer2;
-  components ActiveMessageC;
-  components SerialPrintfC;
 
+  components DrugDeliveryC as App, MainC;
+  components SerialPrintfC;
   App.Boot -> MainC.Boot;
-  App.AMSend -> AMSenderC;
+
+  components new TimerMilliC() as Timer0;
+  App.BeatTimer -> Timer0;
+  components LedsC;
+  App.Leds -> LedsC;
+
+  components ActiveMessageC;
   App.RadioControl -> ActiveMessageC;
   App.Packet -> ActiveMessageC;
-  App.Acks -> AMSenderC;
+
+  components new AMSenderC(AM_RADIOSTATUSMSG);
+  App.AMSend -> AMSenderC;
+  components new AMReceiverC(AM_RADIOSTATUSMSG);
+  App.Receive -> AMReceiverC;
+
+
+  components new TimerMilliC() as Timer1;
+  components new TimerMilliC() as Timer2;
+
 
   App.Timer -> Timer1;
   App.MotorTimer -> Timer2;
@@ -32,9 +43,6 @@ implementation {
   components DrugSchedulerC;
   App.DrugSchedulerI -> DrugSchedulerC;
 
-  components new TimerMilliC() as Timer3;
-  App.BeatTimer -> Timer3;
-  components LedsC;
-  App.Leds -> LedsC;
+
 
 }

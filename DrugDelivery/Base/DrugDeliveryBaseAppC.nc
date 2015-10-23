@@ -11,17 +11,29 @@
 configuration DrugDeliveryBaseAppC {
 }
 implementation {
-  components DrugDeliveryBaseC as App, MainC;
-  components new AMSenderC(AM_DRUGSCHEDULERDATA); // AM_RADIOCOMMANDMSG
-  components new AMReceiverC(AM_RADIODATAMSG);
-  components ActiveMessageC;
-  components SerialPrintfC;
 
+  components DrugDeliveryBaseC as App, MainC;
+  components SerialPrintfC;
   App.Boot -> MainC.Boot;
-  App.Receive -> AMReceiverC;
-  App.AMSend -> AMSenderC;
+
+  components new TimerMilliC() as Timer0;
+  App.BeatTimer -> Timer0;
+  components LedsC;
+  App.Leds -> LedsC;
+
+  components ActiveMessageC;
   App.RadioControl -> ActiveMessageC;
   App.Packet -> ActiveMessageC;
+
+  components new AMSenderC(AM_RADIOSTATUSMSG);
+  App.AMSend -> AMSenderC;
+  components new AMReceiverC(AM_RADIOSTATUSMSG);
+  App.Receive -> AMReceiverC;
+
+
+  
+
+  
 
   components SerialActiveMessageC as SAM;
   App.SAMControl -> SAM;
@@ -29,9 +41,5 @@ implementation {
   App.SAMSend -> SAM.AMSend[AM_DRUGSCHEDULERDATA];
   App.SAMPacket -> SAM;
 
-  components new TimerMilliC() as Timer;
-  App.Timer -> Timer;
-  components LedsC;
-  App.Leds -> LedsC;
 
 }

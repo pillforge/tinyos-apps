@@ -5,41 +5,47 @@
 
 module DrugDeliveryBaseC {
   uses {
-    interface Boot;
 
-    interface Receive;
-    interface AMSend;
-    interface Packet;
+    interface Boot;
+    interface Timer<TMilli> as BeatTimer;
+    interface Leds;
+
     interface SplitControl as RadioControl;
+    interface Packet;
+    interface AMSend;
+    interface Receive;
+
 
     interface SplitControl as SAMControl;
     interface Receive as SAMReceive;
     interface AMSend as SAMSend;
     interface Packet as SAMPacket;
 
-    interface Timer<TMilli>;
-    interface Leds;
   }
 }
 
 /*
- *  Led 2 blinks every second
+ *  Led 0 blinks every second
  *  Led 1 blinks when it receives a message from MCR
- *  Led 0 blinks when it receives a message from PC app (serial)
  */
 
 implementation {
 
   message_t packet;
-  message_t s_packet;
   uint8_t to_send_addr = 2;
+  uint8_t status = 255;
+  uint8_t sending_schedule = 0;
 
-  uint8_t remaining_drug = 100;
-  uint32_t time_interval; // in seconds
-  uint8_t amount; // in percentage
+  uint8_t size_schedule_data = 0;
+  uint32_t schedule_data[][2] = {
+    {60, 20},
+    {60, 20},
+    {180, 60}
+  };
 
-  task void sendSchedule();
-  task void sendRemainingValue();
+  task void handleStatus();
+  task void send121();
+  void sendSchedule();
 
   event void Boot.booted() {
     printf("Base booted: DrugDeliveryBaseC\n");
@@ -49,34 +55,105 @@ implementation {
   event void RadioControl.startDone(error_t err) {
     if (err == SUCCESS) {
       printf("Base radio started.\n");
-      call SAMControl.start();
+      call BeatTimer.startPeriodic(1000);
     } else {
       call RadioControl.start();
     }
   }
 
+  event void BeatTimer.fired() {
+    call Leds.led0Toggle();
+  }
+
+  event message_t* Receive.receive(message_t* bufPtr, void* payload, uint8_t len) {
+    RadioStatusMsg *rsm = (RadioStatusMsg *) payload;
+    call Leds.led1Toggle();
+    status = rsm->status;
+    printf("Status: %d\n", status);
+    post handleStatus();
+    return bufPtr;
+  }
+
+  task void handleStatus() {
+    switch (status) {
+      case 120:
+        sendSchedule();
+        break;
+      case 122:
+        printf("Starting sending the schedule\n");
+        break;
+      case 123:
+        printf("Acknowledgment received\n");
+        break;
+      default:
+        printf("Undefined status code: %d\n", status);
+        break;
+    }
+  }
+
+  void sendSchedule() {
+    if (!sending_schedule) {
+      sending_schedule = 1;
+      printf("Sending 121\n");
+      post send121();
+    }
+  }
+
+  task void send121() {
+    RadioStatusMsg *rsm = (RadioStatusMsg *) call Packet.getPayload(&packet, sizeof(RadioStatusMsg));
+    size_schedule_data = sizeof(schedule_data)/sizeof(schedule_data[0]);
+    rsm->status = 121;
+    rsm->data1 = size_schedule_data;
+    call AMSend.send(to_send_addr, &packet, sizeof(RadioStatusMsg));
+  }
+
+  
+  message_t s_packet;
+  
+
+  uint8_t remaining_drug = 100;
+  uint32_t time_interval; // in seconds
+  uint8_t amount; // in percentage
+
+
+  uint8_t schedule_index = 0;
+  uint8_t is_schedule_sent = 0;
+
+  task void sendSchedule2();
+  task void sendRemainingValue();
+  void sendAllSchedule();
+
+
   event void SAMControl.startDone(error_t err) {
     if (err == SUCCESS) {
       printf("SerialActiveMessage started.\n");
-      call Timer.startPeriodic(1000);
+      sendAllSchedule();
     } else {
       call SAMControl.start();
     }
   }
 
-  event void Timer.fired() {
-    printf("Beat\n");
-    call Leds.led2Toggle();
+
+  void sendAllSchedule() {
+    
+    printf("Start sending the schedule: %d\n", size_schedule_data);
+    post sendSchedule2();
   }
 
-  event message_t* Receive.receive(message_t* bufPtr, void* payload, uint8_t len) {
-    RadioDataMsg *rdm = (RadioDataMsg *) payload;
-    call Leds.led1Toggle();
-    remaining_drug = rdm->remaining_drug;
-    printf("Remaining: %d\n", remaining_drug);
-    post sendRemainingValue();
-    return bufPtr;
+  task void sendSchedule2() {
+    DrugSchedulerData *dsd = (DrugSchedulerData *)
+      call Packet.getPayload(&packet, sizeof(DrugSchedulerData));
+    printf("Sending %d/%d of schedule data.\n", schedule_index, size_schedule_data);
+    dsd->time_interval = schedule_data[schedule_index][0];
+    dsd->amount = schedule_data[schedule_index][1];
+    schedule_index++;
+    if (schedule_index == size_schedule_data) {
+      is_schedule_sent = 1;
+    }
+    call AMSend.send(to_send_addr, &packet, sizeof(DrugSchedulerData));
   }
+
+
 
   task void sendRemainingValue() {
     DrugSchedulerData *dd = (DrugSchedulerData *)
@@ -90,16 +167,8 @@ implementation {
     call Leds.led0Toggle();
     time_interval = dd->time_interval; // in seconds
     amount = dd->amount; // in percentage
-    post sendSchedule();
+    // post sendSchedule2();
     return bufPtr;
-  }
-
-  task void sendSchedule() {
-    DrugSchedulerData *dsd = (DrugSchedulerData *)
-      call Packet.getPayload(&packet, sizeof(DrugSchedulerData));
-    dsd->time_interval = time_interval;
-    dsd->amount = amount;
-    call AMSend.send(to_send_addr, &packet, sizeof(DrugSchedulerData));
   }
 
   event void SAMSend.sendDone(message_t* bufPtr, error_t error) {}
