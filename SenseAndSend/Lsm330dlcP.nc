@@ -98,7 +98,7 @@ implementation {
     return SUCCESS;
   }
   command error_t GyroRead.read(){
-    post ReadAccelValues();
+    post ReadGyroValues();
     return SUCCESS;
   }
 
